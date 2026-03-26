@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PhishArmor Settings</title>
+  <link rel="stylesheet" type="text/css" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>PhishArmor Settings</h1>
+
+    <div class="section">
+      <h2>API Configuration</h2>
+
+      <!-- OpenAI API Settings -->
+      <div class="api-section">
+        <h3>OpenAI API (Required for AI Analysis)</h3>
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="apiChoice" id="useProVersion" value="pro">
+            Use PhishArmor Pro (Recommended)
+          </label>
+          <p class="description">Get premium AI protection with no setup required.</p>
+          
+          <label>
+            <input type="radio" name="apiChoice" id="useUserApiKey" value="user">
+            Use Your Own OpenAI API Key
+          </label>
+          <p class="description">Provide your own OpenAI API key for unlimited usage.</p>
+        </div>
+        
+        <div id="userApiKeySection" class="input-section">
+          <label for="userApiKeyInput">Your OpenAI API Key:</label>
+          <input type="password" id="userApiKeyInput" placeholder="sk-...">
+          <p class="help-text">Get your API key from <a href="https://platform.openai.com/account/api-keys" target="_blank">OpenAI Platform</a></p>
+        </div>
+      </div>
+
+      <!-- AbuseIPDB API Settings -->
+      <div class="api-section">
+        <h3>AbuseIPDB API (Optional - for Enhanced Domain Verification)</h3>
+        <p class="description">Provides real-time domain reputation checking for better sender verification.</p>
+        
+        <div class="input-section">
+          <label for="abuseipdbApiKeyInput">AbuseIPDB API Key (Optional):</label>
+          <input type="password" id="abuseipdbApiKeyInput" placeholder="Enter your AbuseIPDB API key">
+          <p class="help-text">Get your free API key from <a href="https://www.abuseipdb.com/account/api" target="_blank">AbuseIPDB</a>. Without this key, basic domain heuristics will be used.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button id="saveSettingsButton" class="primary-button">Save Settings</button>
+      <button id="exitSettingsButton" class="secondary-button" style="display: none;">Done</button>
+    </div>
+
+    <div id="statusMessage" class="status-message"></div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html> 

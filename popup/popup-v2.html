@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhishArmor</title>
+  <link rel="stylesheet" type="text/css" href="popup.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+</head>
+<body>
+  <!-- LOGIN VIEW -->
+  <div id="logged-out-view" class="popup-container" role="main" aria-labelledby="login-title">
+    <header class="popup-header">
+      <div class="logo-container">
+        <img src="../assets/logo1.png" alt="PhishArmor Logo" class="popup-logo" role="img">
+      </div>
+    </header>
+
+    <main class="popup-content">
+      <h1 id="login-title" class="popup-title">PhishArmor Protection</h1>
+      <p class="popup-description">Protect your emails with AI-powered phishing detection.</p>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form" autocomplete="on">
+        <div class="form-group">
+          <input type="email" id="login-email" placeholder="Email address" required autocomplete="email"
+                 aria-label="Email address">
+        </div>
+        <div class="form-group">
+          <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password"
+                 aria-label="Password">
+        </div>
+        <div id="login-error" class="error-message" style="display: none;" role="alert"></div>
+        <button id="login-button" class="btn-primary material-button" type="submit">
+          <span class="button-text">Log In</span>
+          <span class="button-ripple"></span>
+        </button>
+      </form>
+
+      <div class="divider"><span>or</span></div>
+
+      <button id="google-login-button" class="btn-google material-button" type="button"
+              aria-label="Sign in with Google">
+        <span class="button-text">Sign in with Google</span>
+      </button>
+
+      <div class="signup-section" role="region" aria-label="Sign up information">
+        <span class="signup-text">Don't have an account? </span>
+        <a href="#" id="signup-link" class="signup-link" role="link"
+           aria-label="Sign up for a new account" tabindex="0">Sign up</a>
+      </div>
+    </main>
+  </div>
+
+  <!-- SIGNUP VIEW -->
+  <div id="signup-view" class="popup-container" style="display: none;" role="main" aria-labelledby="signup-title">
+    <header class="popup-header">
+      <div class="logo-container">
+        <img src="../assets/logo1.png" alt="PhishArmor Logo" class="popup-logo" role="img">
+      </div>
+    </header>
+
+    <main class="popup-content">
+      <h1 id="signup-title" class="popup-title">Create Account</h1>
+
+      <form id="signup-form" class="auth-form" autocomplete="on">
+        <div class="form-group">
+          <input type="text" id="signup-name" placeholder="Full name" autocomplete="name"
+                 aria-label="Full name">
+        </div>
+        <div class="form-group">
+          <input type="email" id="signup-email" placeholder="Email address" required autocomplete="email"
+                 aria-label="Email address">
+        </div>
+        <div class="form-group">
+          <input type="password" id="signup-password" placeholder="Password (min 8 characters)" required
+                 minlength="8" autocomplete="new-password" aria-label="Password">
+        </div>
+        <div id="signup-error" class="error-message" style="display: none;" role="alert"></div>
+        <div id="signup-success" class="success-message" style="display: none;" role="status"></div>
+        <button id="signup-button" class="btn-primary material-button" type="submit">
+          <span class="button-text">Create Account</span>
+          <span class="button-ripple"></span>
+        </button>
+      </form>
+
+      <div class="signup-section">
+        <span class="signup-text">Already have an account? </span>
+        <a href="#" id="back-to-login-link" class="signup-link" role="link" tabindex="0">Log in</a>
+      </div>
+    </main>
+  </div>
+
+  <!-- DASHBOARD VIEW -->
+  <div id="logged-in-view" class="popup-container" style="display: none;" role="main" aria-labelledby="dashboard-title">
+    <header class="popup-header">
+      <div class="logo-container">
+        <img src="../assets/logo1.png" alt="PhishArmor Logo" class="popup-logo" role="img">
+      </div>
+    </header>
+
+    <main class="popup-content">
+      <h1 id="dashboard-title" class="popup-title">Dashboard</h1>
+      <p id="user-email-display" class="user-email" style="display: none;"></p>
+
+      <section class="security-summary" aria-labelledby="security-score-label">
+        <div class="score-container">
+          <div class="score-label" id="security-score-label">Security Score</div>
+          <div class="score-value" id="current-score" role="status">N/A</div>
+        </div>
+        <p class="score-explanation" id="score-explanation">Scan your latest email to see your score.</p>
+      </section>
+
+      <section class="stats-container" aria-label="Security statistics">
+        <div class="stat-item" role="region" aria-labelledby="blocked-label">
+          <div class="stat-value" id="blocked-urls-count">0</div>
+          <div class="stat-label" id="blocked-label">Flagged</div>
+        </div>
+        <div class="stat-item" role="region" aria-labelledby="scanned-label">
+          <div class="stat-value" id="emails-scanned">0</div>
+          <div class="stat-label" id="scanned-label">Scanned</div>
+        </div>
+      </section>
+
+      <section class="popup-actions" aria-label="Dashboard actions">
+        <button id="flagged-emails-button" class="btn-secondary material-button" type="button">
+          <span class="material-icons" aria-hidden="true">flag</span>
+          <span class="button-text">View Flagged Emails</span>
+        </button>
+        <button id="settings-button" class="btn-secondary material-button" type="button">
+          <span class="material-icons" aria-hidden="true">settings</span>
+          <span class="button-text">Settings</span>
+        </button>
+        <button id="logout-button" class="btn-logout material-button" type="button">
+          <span class="material-icons" aria-hidden="true">logout</span>
+          <span class="button-text">Logout</span>
+        </button>
+      </section>
+    </main>
+  </div>
+
+  <!-- LOADING STATE -->
+  <div id="loading-view" class="popup-container loading-container" style="display: none;" role="status" aria-live="polite">
+    <div class="loading-content">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <p class="loading-text">Loading...</p>
+    </div>
+  </div>
+
+  <script src="popup-v2.js"></script>
+</body>
+</html>

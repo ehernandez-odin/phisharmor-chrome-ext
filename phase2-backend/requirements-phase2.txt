@@ -1,0 +1,7 @@
+# Phase 2 additions — append these to your existing requirements.txt
+
+# JWT authentication
+PyJWT==2.8.0
+
+# Supabase Python client
+supabase==2.10.0

@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "PhishArmor",
+  "version": "0.1.0",
+  "description": "AI-powered phishing detection for your emails.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "alarms",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "*://*.google.com/*", 
+    "*://*.outlook.live.com/*",
+    "*://*.outlook.office.com/*",
+    "*://*.mail.yahoo.com/*",
+    "https://api.openai.com/*",
+    "https://webrisk.googleapis.com/*",
+    "https://api.apivoid.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/16x16.png",
+      "32": "icons/32x32.png",
+      "48": "icons/48x48.png",
+      "128": "icons/128x128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "options_page": "options/options.html",
+  "content_scripts": [
+    {
+      "matches": ["*://mail.google.com/*", "*://outlook.live.com/*", "*://outlook.office.com/*", "*://mail.yahoo.com/*"],
+      "js": ["content_scripts/content.js"],
+      "css": ["content_scripts/content.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/shield-green.png",
+        "icons/shield-yellow.png",
+        "icons/shield-red.png",
+        "icons/shield-grey.png",
+        "icons/logo-50x50.png",
+        "icons/checkmark-green.png",
+        "icons/cross-red.png",
+        "icons/icon-placeholder.png",
+        "icons/loading.gif",
+        "assets/logo1.png"
+      ],
+      "matches": ["*://mail.google.com/*", "*://outlook.live.com/*", "*://outlook.office.com/*", "*://mail.yahoo.com/*"]
+    }
+  ],
+  "icons": {
+    "16": "icons/16x16.png",
+    "32": "icons/32x32.png",
+    "48": "icons/48x48.png",
+    "128": "icons/128x128.png"
+  }
+} 

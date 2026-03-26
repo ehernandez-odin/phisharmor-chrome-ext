@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PhishArmor Settings</title>
+  <link rel="stylesheet" type="text/css" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>PhishArmor Settings</h1>
+
+    <div class="section">
+      <h2>Analysis Preferences</h2>
+
+      <div class="api-section">
+        <h3>Sensitivity Level</h3>
+        <p class="description">Controls how aggressively PhishArmor flags emails. Higher sensitivity means more alerts but fewer missed threats.</p>
+
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="sensitivity" id="sensitivity-low" value="low">
+            Low — Only flag clearly dangerous emails
+          </label>
+          <label>
+            <input type="radio" name="sensitivity" id="sensitivity-medium" value="medium" checked>
+            Medium — Balanced detection (recommended)
+          </label>
+          <label>
+            <input type="radio" name="sensitivity" id="sensitivity-high" value="high">
+            High — Flag anything remotely suspicious
+          </label>
+        </div>
+      </div>
+
+      <div class="api-section">
+        <h3>Notifications</h3>
+        <div class="input-section">
+          <label>
+            <input type="checkbox" id="show-notifications" checked>
+            Show browser notifications for high-risk emails
+          </label>
+        </div>
+      </div>
+
+      <div class="api-section">
+        <h3>Auto-Analysis</h3>
+        <div class="input-section">
+          <label>
+            <input type="checkbox" id="auto-analyze" checked>
+            Automatically analyze emails when opened
+          </label>
+          <p class="help-text">When disabled, click the shield icon to manually trigger analysis.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Account</h2>
+      <div class="api-section">
+        <p id="account-status" class="description">Not logged in</p>
+        <p id="account-plan" class="description" style="display:none;"></p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>About</h2>
+      <div class="api-section">
+        <p class="description">PhishArmor v2.0.0</p>
+        <p class="description">All email analysis is performed securely through the PhishArmor backend. No API keys are stored in this extension.</p>
+        <p class="description"><a href="https://phisharmor.com/privacy" target="_blank">Privacy Policy</a></p>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button id="saveSettingsButton" class="primary-button">Save Settings</button>
+    </div>
+
+    <div id="statusMessage" class="status-message"></div>
+  </div>
+
+  <script src="options-v2.js"></script>
+</body>
+</html>

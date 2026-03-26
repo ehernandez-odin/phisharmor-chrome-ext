@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build output
+dist/
+build/
+*.crx
+*.pem
+*.zip
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+api-keys.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python (backend)
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+venv/
+.venv/
+env/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.bak

@@ -1,0 +1,119 @@
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background-color: #f4f7f6;
+    color: #333;
+    max-width: 600px;
+    margin: 20px auto;
+}
+
+h1 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 30px;
+}
+
+.settings-section {
+    background-color: #ffffff;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.settings-section h2 {
+    margin-top: 0;
+    color: #34495e;
+    border-bottom: 1px solid #ecf0f1;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.settings-section p {
+    font-size: 0.95em;
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+
+.settings-section p.description {
+    font-size: 0.85em;
+    color: #7f8c8d;
+    margin-left: 25px; /* Indent description under radio button */
+    margin-bottom: 15px;
+}
+
+.settings-section label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    display: inline-block; /* For radio label alignment */
+}
+
+input[type="radio"] {
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+input[type="password"], input[type="text"] {
+    width: calc(100% - 22px); /* Full width minus padding and border */
+    padding: 10px;
+    margin-top: 5px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+#userApiKeySection {
+    padding: 15px;
+    background-color: #ecf0f1;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.api-key-info {
+    font-size: 0.8em !important; /* Override general p styles */
+    color: #95a5a6 !important;
+    margin-top: 8px !important;
+    margin-left: 0 !important; /* Reset indent for this specific p */
+}
+
+button#saveSettingsButton {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1.1em;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+}
+
+button#saveSettingsButton:hover {
+    background-color: #229954;
+}
+
+#statusMessage {
+    margin-top: 15px;
+    text-align: center;
+    font-weight: bold;
+}
+
+button#exitSettingsButton {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background-color: #7f8c8d; /* A neutral or secondary color */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.2s ease;
+    margin-top: 10px; /* Added margin-top already in HTML, but good to have in CSS too */
+}
+
+button#exitSettingsButton:hover {
+    background-color: #6c7a7d;
+} 

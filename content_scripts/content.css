@@ -1,0 +1,119 @@
+/* content.css */
+/* Styles for the shield icon and any other UI elements injected by the content script */
+
+.phisharmor-shield-icon {
+  width: 16px;
+  height: 16px;
+  margin-left: 8px;
+  vertical-align: middle; /* Align with text or other icons */
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out;
+}
+
+.phisharmor-shield-icon:hover {
+  transform: scale(1.1);
+}
+
+/* Styles for the tooltip/modal that appears on shield hover/click */
+/* These will be applied to tooltip.html when it's injected as an iframe or div */
+
+#phisharmor-tooltip-container {
+    position: fixed; /* Use fixed to position relative to viewport, or absolute for specific parent */
+    z-index: 2147483647; /* Max z-index */
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 15px;
+    width: 320px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #333;
+    line-height: 1.6;
+}
+
+#phisharmor-tooltip-container h3 {
+    font-size: 16px;
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #111;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+#phisharmor-tooltip-score {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+#phisharmor-tooltip-score img {
+    width: 32px; /* Larger shield in tooltip */
+    height: 32px;
+    margin-right: 10px;
+}
+
+#phisharmor-tooltip-score-text {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.phisharmor-tooltip-indicator {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.phisharmor-tooltip-indicator img {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+}
+
+.phisharmor-tooltip-indicator .title {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+#phisharmor-tooltip-explanation h4 {
+    font-size: 14px;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+#phisharmor-tooltip-explanation p {
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+#phisharmor-tooltip-cta {
+    display: block;
+    margin-top: 15px;
+    padding: 8px 12px;
+    background-color: #007bff;
+    color: white;
+    text-align: center;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+#phisharmor-tooltip-cta:hover {
+    background-color: #0056b3;
+}
+
+/* Close button for tooltip */
+.phisharmor-tooltip-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #888;
+}
+.phisharmor-tooltip-close:hover {
+    color: #333;
+} 
