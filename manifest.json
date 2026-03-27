@@ -1,24 +1,27 @@
 {
   "manifest_version": 3,
   "name": "PhishArmor",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "AI-powered phishing detection for your emails.",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
     "alarms",
-    "contextMenus"
+    "contextMenus",
+    "identity"
   ],
   "host_permissions": [
-    "*://*.google.com/*", 
+    "*://*.google.com/*",
     "*://*.outlook.live.com/*",
     "*://*.outlook.office.com/*",
     "*://*.mail.yahoo.com/*",
-    "https://api.openai.com/*",
-    "https://webrisk.googleapis.com/*",
-    "https://api.apivoid.com/*"
+    "https://phisharmor-backend-bd392.ondigitalocean.app/*",
+    "https://indcrrlvpotinxdhrthg.supabase.co/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://phisharmor-backend-bd392.ondigitalocean.app https://indcrrlvpotinxdhrthg.supabase.co"
+  },
   "action": {
     "default_popup": "popup/popup.html",
     "default_icon": {
@@ -29,7 +32,7 @@
     }
   },
   "background": {
-    "service_worker": "background/background.js"
+    "service_worker": "background/background-v2.js"
   },
   "options_page": "options/options.html",
   "content_scripts": [
@@ -62,4 +65,4 @@
     "48": "icons/48x48.png",
     "128": "icons/128x128.png"
   }
-} 
+}

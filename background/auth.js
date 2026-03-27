@@ -13,7 +13,7 @@
 // Supabase configuration
 // These are public keys — safe to include in the extension
 const SUPABASE_URL = 'https://indcrrlvpotinxdhrthg.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY'; // TODO: Replace with actual anon key from Supabase dashboard
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluZGNycmx2cG90aW54ZGhydGhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4NDg2MzcsImV4cCI6MjA2NTQyNDYzN30.9RBDGPfVD1O67vV0xk4sU9ptHgI4rt4M3bi1LNciXC8';
 
 const AUTH_ENDPOINTS = {
   signUp: `${SUPABASE_URL}/auth/v1/signup`,

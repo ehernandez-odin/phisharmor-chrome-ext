@@ -81,10 +81,9 @@ function injectShieldIconOpenView(emailId, scoreDetails, targetToolbar) {
 
     if (scoreDetails && scoreDetails.level) {
         if (scoreDetails.level === 'safe') iconName = 'shield-green.png';
-        else if (scoreDetails.level === 'caution') iconName = 'shield-yellow.png';
-        else if (scoreDetails.level === 'dangerous') iconName = 'shield-red.png';
+        else if (scoreDetails.level === 'caution' || scoreDetails.level === 'medium') iconName = 'shield-yellow.png';
+        else if (scoreDetails.level === 'dangerous' || scoreDetails.level === 'high' || scoreDetails.level === 'critical') iconName = 'shield-red.png';
         else if (scoreDetails.level === 'error') iconName = 'shield-grey.png';
-        // else if (scoreDetails.level === 'loading') iconName = 'logo-50x50.png';
         else if (scoreDetails.level === 'loading') iconName = 'loading.gif';
     }
 
@@ -330,10 +329,10 @@ function populateDynamicTooltip(tooltipElement, scoreDetails, emailId) {
     let scoreColor = '#22c55e'; // green
     let scoreIcon = '✓';
     
-    if (scoreDetails.level === 'caution') {
+    if (scoreDetails.level === 'caution' || scoreDetails.level === 'medium') {
         scoreColor = '#fbbf24'; // yellow for caution
         scoreIcon = '⚠';
-    } else if (scoreDetails.level === 'dangerous') {
+    } else if (scoreDetails.level === 'dangerous' || scoreDetails.level === 'high' || scoreDetails.level === 'critical') {
         scoreColor = '#ef4444'; // red for dangerous
         scoreIcon = '✕';
     } else if (scoreDetails.level === 'error') {
@@ -388,7 +387,7 @@ function populateDynamicTooltip(tooltipElement, scoreDetails, emailId) {
                 <h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #1e293b;">AI Analysis Summary</h4>
                 <div style="background: #f8fafc; border-radius: 6px; padding: 12px; border-left: 3px solid ${scoreColor};">
                     <p style="margin: 0; line-height: 1.4; color: #475569; font-size: 13px;">
-                        ${scoreDetails.explanation || scoreDetails.aiComments || 'Analysis completed successfully. No additional details available.'}
+                        ${scoreDetails.overallAssessment || scoreDetails.explanation || scoreDetails.aiComments || 'Analysis completed successfully. No additional details available.'}
                     </p>
                     ${scoreDetails.aiAnalysisDetails && scoreDetails.aiAnalysisDetails.userRecommendation ? 
                         `<div style="margin-top: 12px; padding: 10px; background: #e0f2fe; border-radius: 4px; border-left: 3px solid #0284c7;">

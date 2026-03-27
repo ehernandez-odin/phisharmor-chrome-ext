@@ -78,8 +78,13 @@ async function apiRequest(endpoint, options = {}) {
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({}));
+      // Ensure message is always a string (detail/message can be objects)
+      let errorMessage = errorBody.detail || errorBody.message || `Request failed: ${response.status}`;
+      if (typeof errorMessage !== 'string') {
+        errorMessage = JSON.stringify(errorMessage);
+      }
       throw new ApiError(
-        errorBody.detail || errorBody.message || `Request failed: ${response.status}`,
+        errorMessage,
         response.status,
         errorBody
       );

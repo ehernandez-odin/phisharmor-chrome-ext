@@ -209,9 +209,10 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
 
     // 3. Call the backend (handles all AI/security checks)
     const startTime = Date.now();
+    const rawSender = emailData.sender || emailData.from || 'unknown';
     const result = await API.analyzeEmail({
       id: emailData.id,
-      sender: emailData.sender || emailData.from || 'unknown',
+      sender: extractEmailAddress(rawSender),
       subject: emailData.subject || 'No subject',
       body: emailData.bodyText || emailData.body || '',
       bodyHtml: emailData.bodyHtml || '',
@@ -238,7 +239,11 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
     console.log(`PhishArmor: Analysis complete for ${emailData.id} — ${scoreDetails.level} (${elapsed}ms)`);
 
   } catch (error) {
-    console.error('PhishArmor: Analysis failed for', emailData.id, error);
+    console.error('PhishArmor: Analysis failed for', emailData.id,
+      error.message || error,
+      error.statusCode ? `(HTTP ${error.statusCode})` : '',
+      error.details ? JSON.stringify(error.details) : ''
+    );
 
     const errorDetails = {
       level: 'error',
@@ -247,7 +252,7 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
         ? 'Unable to reach PhishArmor servers. Please check your connection.'
         : error.isAuthError
         ? 'Please log in to continue scanning.'
-        : 'Analysis failed. Please try again.',
+        : `Analysis failed: ${error.message || 'Unknown error'}. Please try again.`,
       error: error.message,
     };
 
@@ -517,4 +522,30 @@ function extractUrlsFromText(text) {
   const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
   const matches = text.match(urlRegex) || [];
   return [...new Set(matches)].slice(0, 20); // Dedupe, max 20 URLs
+}
+
+/**
+ * Extract a bare email address from a sender string.
+ * Handles formats like:
+ *   "Display Name <user@example.com>"  → "user@example.com"
+ *   "user@example.com"                 → "user@example.com"
+ *   "N/A (Selected Text)"             → "unknown@unknown.com"
+ */
+function extractEmailAddress(sender) {
+  if (!sender) return 'unknown@unknown.com';
+
+  // Try to extract email from "Name <email>" format
+  const angleMatch = sender.match(/<([^>]+@[^>]+)>/);
+  if (angleMatch) return angleMatch[1].trim();
+
+  // Check if it's already a bare email
+  const bareMatch = sender.match(/^[\w.+-]+@[\w.-]+\.\w+$/);
+  if (bareMatch) return bareMatch[0].trim();
+
+  // Try to find any email-like pattern in the string
+  const anyMatch = sender.match(/[\w.+-]+@[\w.-]+\.\w+/);
+  if (anyMatch) return anyMatch[0].trim();
+
+  // No valid email found — return a placeholder
+  return 'unknown@unknown.com';
 }
