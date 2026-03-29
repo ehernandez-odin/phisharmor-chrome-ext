@@ -23,7 +23,7 @@
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://phisharmor-backend-bd392.ondigitalocean.app https://indcrrlvpotinxdhrthg.supabase.co"
   },
   "action": {
-    "default_popup": "popup/popup.html",
+    "default_popup": "popup/popup-v2.html",
     "default_icon": {
       "16": "icons/16x16.png",
       "32": "icons/32x32.png",
@@ -34,7 +34,7 @@
   "background": {
     "service_worker": "background/background-v2.js"
   },
-  "options_page": "options/options.html",
+  "options_page": "options/options-v2.html",
   "content_scripts": [
     {
       "matches": ["*://mail.google.com/*", "*://outlook.live.com/*", "*://outlook.office.com/*", "*://mail.yahoo.com/*"],

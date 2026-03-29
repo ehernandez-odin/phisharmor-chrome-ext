@@ -106,6 +106,63 @@
       <h1 id="dashboard-title" class="popup-title">Dashboard</h1>
       <p id="user-email-display" class="user-email" style="display: none;"></p>
 
+      <!-- Tier Status Section -->
+      <div id="tier-section" class="tier-section" style="margin: 12px 16px; padding: 14px; border-radius: 10px; display: none;">
+          <!-- Free tier -->
+          <div id="tier-free" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Free Plan</span>
+                  <span style="font-size: 11px; color: #94a3b8;">$0/forever</span>
+              </div>
+              <div style="margin-bottom: 8px;">
+                  <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                      <span id="scan-count-text" style="font-size: 12px; color: #475569;">0 of 5 scans used today</span>
+                  </div>
+                  <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                      <div id="scan-progress-bar" style="height: 100%; background: #3b82f6; border-radius: 3px; transition: width 0.3s ease; width: 0%;"></div>
+                  </div>
+              </div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 10px;">Manual scanning only</div>
+              <button id="btn-upgrade" style="width: 100%; padding: 8px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">
+                  Try Premium Free — 7 Days
+              </button>
+          </div>
+
+          <!-- Trial tier -->
+          <div id="tier-trial" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 12px; font-weight: 600; color: #0369a1; text-transform: uppercase; letter-spacing: 0.5px;">⏱ Premium Trial</span>
+                  <span style="font-size: 11px; color: #0369a1;">$4.99/mo after</span>
+              </div>
+              <div id="trial-days-text" style="font-size: 13px; color: #0c4a6e; font-weight: 500; margin-bottom: 4px;">7 days remaining</div>
+              <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">Auto-scan active · 50 scans/day</div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span id="trial-scan-count" style="font-size: 12px; color: #475569;">0 of 50 scans used today</span>
+              </div>
+              <div style="width: 100%; height: 6px; background: #e0f2fe; border-radius: 3px; overflow: hidden; margin-bottom: 10px;">
+                  <div id="trial-progress-bar" style="height: 100%; background: #0284c7; border-radius: 3px; transition: width 0.3s ease; width: 0%;"></div>
+              </div>
+              <button id="btn-subscribe" style="width: 100%; padding: 8px; background: #2563eb; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">
+                  Subscribe Now — $4.99/mo
+              </button>
+          </div>
+
+          <!-- Premium tier -->
+          <div id="tier-premium" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span style="font-size: 12px; font-weight: 600; color: #059669; text-transform: uppercase; letter-spacing: 0.5px;">✓ Premium</span>
+                  <span style="font-size: 11px; color: #059669;">$4.99/mo</span>
+              </div>
+              <div style="font-size: 11px; color: #64748b; margin-bottom: 4px;">Auto-scan active · 50 scans/day · Ad-free</div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span id="premium-scan-count" style="font-size: 12px; color: #475569;">0 of 50 scans used today</span>
+              </div>
+              <div style="width: 100%; height: 6px; background: #d1fae5; border-radius: 3px; overflow: hidden;">
+                  <div id="premium-progress-bar" style="height: 100%; background: #059669; border-radius: 3px; transition: width 0.3s ease; width: 0%;"></div>
+              </div>
+          </div>
+      </div>
+
       <section class="security-summary" aria-labelledby="security-score-label">
         <div class="score-container">
           <div class="score-label" id="security-score-label">Security Score</div>

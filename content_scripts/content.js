@@ -85,6 +85,8 @@ function injectShieldIconOpenView(emailId, scoreDetails, targetToolbar) {
         else if (scoreDetails.level === 'dangerous' || scoreDetails.level === 'high' || scoreDetails.level === 'critical') iconName = 'shield-red.png';
         else if (scoreDetails.level === 'error') iconName = 'shield-grey.png';
         else if (scoreDetails.level === 'loading') iconName = 'loading.gif';
+        else if (scoreDetails.level === 'manual') iconName = 'shield-grey.png'; // Free user, click to scan
+        else if (scoreDetails.level === 'limit_reached') iconName = 'shield-grey.png'; // Daily limit hit
     }
 
     shieldIcon.src = chrome.runtime.getURL(`icons/${iconName}`);
@@ -96,7 +98,18 @@ function injectShieldIconOpenView(emailId, scoreDetails, targetToolbar) {
     shieldIcon.style.verticalAlign = 'middle';
     shieldIcon.style.zIndex = '1000';
     shieldIcon.style.position = 'relative'; // Ensure it's clickable
-    shieldIcon.title = 'Click to see PhishArmor Report';
+
+    // Update title attribute based on level
+    if (scoreDetails && scoreDetails.level === 'manual') {
+        shieldIcon.title = 'Click to scan this email (Free plan)';
+    } else if (scoreDetails && scoreDetails.level === 'limit_reached') {
+        shieldIcon.title = 'Daily scan limit reached. Upgrade for more scans.';
+    } else {
+        shieldIcon.title = 'Click to see PhishArmor Report';
+    }
+
+    // Store the level in the shield's dataset
+    shieldIcon.dataset.level = scoreDetails?.level || 'unknown';
 
     // Always append to the end of the toolbar as per user preference
     targetToolbar.appendChild(shieldIcon);
@@ -111,6 +124,36 @@ function injectShieldIconOpenView(emailId, scoreDetails, targetToolbar) {
         // Add visual feedback
         shieldIcon.style.opacity = '0.7';
         setTimeout(() => { shieldIcon.style.opacity = '1'; }, 200);
+        
+        // Check if shield is in manual or limit_reached state
+        if (shieldIcon.dataset.level === 'manual' || shieldIcon.dataset.level === 'limit_reached') {
+            // For manual state: trigger a manual scan with full email data
+            if (shieldIcon.dataset.level === 'manual') {
+                // Extract email data from the DOM (same as processOpenEmail does)
+                const subjectElement = document.querySelector('h2.hP');
+                const extractedData = subjectElement ? extractEmailDataFromDOM(emailId, subjectElement) : null;
+
+                if (extractedData) {
+                    extractedData.triggerType = 'manual';
+                    chrome.runtime.sendMessage({
+                        action: "analyzeEmail",
+                        emailData: extractedData
+                    });
+                } else {
+                    // Fallback: send minimal data with manual trigger
+                    console.warn("PhishArmor: Could not extract email data for manual scan, sending ID only");
+                    chrome.runtime.sendMessage({
+                        action: "analyzeEmail",
+                        emailData: { id: emailId, triggerType: 'manual' }
+                    });
+                }
+                // Show loading state
+                shieldIcon.src = chrome.runtime.getURL('icons/loading.gif');
+                shieldIcon.dataset.level = 'loading';
+                return;
+            }
+            // For limit_reached: show upgrade prompt in tooltip instead
+        }
         
         toggleDynamicTooltip(emailId, shieldIcon);
     }, true); // Use capture phase to ensure we get the event first
@@ -246,16 +289,34 @@ function toggleDynamicTooltip(emailId, anchorElement) {
             console.log("  - isLoadingState at error time:", isLoadingState);
             console.log("  - Exact error comparison:", response.error === "No report data found");
             
-            // Check if this is a "No report data found" error and we're in loading state
-            if (response.error === "No report data found" && isLoadingState) {
-                console.log("PhishArmor DEBUG: Showing loading content instead of error");
-                // Show loading message instead of error
-                showLoadingTooltipContent(phishArmorDynamicTooltip, closeButton);
+            // Check if this is a "No report data found" error
+            if (response.error === "No report data found") {
+                if (isLoadingState) {
+                    console.log("PhishArmor DEBUG: Showing loading content instead of error");
+                    showLoadingTooltipContent(phishArmorDynamicTooltip, closeButton);
+                } else {
+                    // No cached data — auto-trigger a manual scan and show loading
+                    console.log("PhishArmor DEBUG: No data found, triggering manual scan");
+                    const subjectEl = document.querySelector('h2.hP');
+                    const emailDataForScan = subjectEl ? extractEmailDataFromDOM(emailId, subjectEl) : null;
+                    if (emailDataForScan) {
+                        emailDataForScan.triggerType = 'manual';
+                        chrome.runtime.sendMessage({ action: "analyzeEmail", emailData: emailDataForScan });
+                        showLoadingTooltipContent(phishArmorDynamicTooltip, closeButton);
+                        // Update the shield icon to loading
+                        if (anchorElement) {
+                            anchorElement.src = chrome.runtime.getURL('icons/loading.gif');
+                            anchorElement.dataset.level = 'loading';
+                        }
+                    } else {
+                        phishArmorDynamicTooltip.innerHTML = `<p style="color:red; text-align:center;">Error: ${response.error}</p>`;
+                        phishArmorDynamicTooltip.appendChild(closeButton);
+                    }
+                }
             } else {
                 console.log("PhishArmor DEBUG: Showing error message");
-                // Show actual error for other cases
                 phishArmorDynamicTooltip.innerHTML = `<p style="color:red; text-align:center;">Error: ${response.error}</p>`;
-                phishArmorDynamicTooltip.appendChild(closeButton); // Re-add close button
+                phishArmorDynamicTooltip.appendChild(closeButton);
             }
         } else if (response && response.scoreDetails) {
             populateDynamicTooltip(phishArmorDynamicTooltip, response.scoreDetails, emailId);
@@ -297,6 +358,74 @@ function showLoadingTooltipContent(tooltipElement, closeButton) {
 }
 
 function populateDynamicTooltip(tooltipElement, scoreDetails, emailId) {
+    // Check for login_required state
+    if (scoreDetails.level === 'login_required') {
+        tooltipElement.innerHTML = `
+            <div style="padding: 32px 24px; text-align: center;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 60px; height: 60px; border-radius: 50%; background: #f1f5f9; color: #64748b; font-size: 24px; margin-bottom: 16px;">🔑</div>
+                <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #1e293b;">Login Required</h3>
+                <p style="margin: 0 0 16px 0; color: #64748b; font-size: 13px; line-height: 1.4;">
+                    Please log in via the PhishArmor extension popup to scan emails for phishing threats.
+                </p>
+                <p style="margin: 0; font-size: 12px; color: #94a3b8;">Click the PhishArmor icon in your browser toolbar to sign in.</p>
+            </div>
+        `;
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '×';
+        closeBtn.style.cssText = 'position:absolute;top:5px;right:10px;background:none;border:none;font-size:20px;cursor:pointer;color:#777;';
+        closeBtn.onclick = () => removeDynamicTooltip();
+        tooltipElement.appendChild(closeBtn);
+        return;
+    }
+
+    // Check for manual scan state (free tier, auto-scan blocked)
+    if (scoreDetails.level === 'manual') {
+        tooltipElement.innerHTML = `
+            <div style="padding: 32px 24px; text-align: center;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 60px; height: 60px; border-radius: 50%; background: #eff6ff; color: #3b82f6; font-size: 24px; margin-bottom: 16px;">🛡️</div>
+                <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #1e293b;">Manual Scan Required</h3>
+                <p style="margin: 0 0 16px 0; color: #64748b; font-size: 13px; line-height: 1.4;">
+                    ${scoreDetails.message || 'Click the shield icon to scan this email. Free plan supports manual scanning only.'}
+                </p>
+                <a href="https://phisharmor.com/pricing" target="_blank"
+                   style="display: inline-block; padding: 8px 20px; background: #2563eb; color: white; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 500;">
+                    Upgrade for Auto-Scan
+                </a>
+            </div>
+        `;
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '×';
+        closeBtn.style.cssText = 'position:absolute;top:5px;right:10px;background:none;border:none;font-size:20px;cursor:pointer;color:#777;';
+        closeBtn.onclick = () => removeDynamicTooltip();
+        tooltipElement.appendChild(closeBtn);
+        return;
+    }
+
+    // Check for limit_reached state
+    if (scoreDetails.level === 'limit_reached') {
+        tooltipElement.innerHTML = `
+            <div style="padding: 32px 24px; text-align: center;">
+                <div style="display: inline-flex; align-items: center; justify-content: center; width: 60px; height: 60px; border-radius: 50%; background: #f1f5f9; color: #64748b; font-size: 24px; margin-bottom: 16px;">🔒</div>
+                <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #1e293b;">Daily Scan Limit Reached</h3>
+                <p style="margin: 0 0 16px 0; color: #64748b; font-size: 13px; line-height: 1.4;">
+                    You've used all ${scoreDetails.scanInfo?.daily_scan_limit || 5} of your free daily scans. Upgrade to Premium for 50 scans/day.
+                </p>
+                <a href="https://phisharmor.com/pricing" target="_blank" 
+                   style="display: inline-block; padding: 10px 24px; background: #2563eb; color: white; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600;">
+                    Upgrade to Premium — $4.99/mo
+                </a>
+                <p style="margin: 12px 0 0 0; font-size: 11px; color: #94a3b8;">Resets at midnight UTC</p>
+            </div>
+        `;
+        // Add close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '×';
+        closeBtn.style.cssText = 'position:absolute;top:5px;right:10px;background:none;border:none;font-size:20px;cursor:pointer;color:#777;';
+        closeBtn.onclick = () => removeDynamicTooltip();
+        tooltipElement.appendChild(closeBtn);
+        return;
+    }
+    
     // Clear previous content
     tooltipElement.innerHTML = '';
 
@@ -325,12 +454,14 @@ function populateDynamicTooltip(tooltipElement, scoreDetails, emailId) {
     }
     
     // Use the new risk level display
-    let displayText = scoreDetails.riskLevel || 'Unknown';
-    let scoreColor = '#22c55e'; // green
-    let scoreIcon = '✓';
-    
-    if (scoreDetails.level === 'caution' || scoreDetails.level === 'medium') {
-        scoreColor = '#fbbf24'; // yellow for caution
+    let displayText = scoreDetails.score || scoreDetails.riskLevel || 'Unknown';
+    let scoreColor, scoreIcon;
+
+    if (scoreDetails.level === 'safe') {
+        scoreColor = '#22c55e'; // green for safe
+        scoreIcon = '✓';
+    } else if (scoreDetails.level === 'caution' || scoreDetails.level === 'medium') {
+        scoreColor = '#f59e0b'; // amber/yellow for caution
         scoreIcon = '⚠';
     } else if (scoreDetails.level === 'dangerous' || scoreDetails.level === 'high' || scoreDetails.level === 'critical') {
         scoreColor = '#ef4444'; // red for dangerous
@@ -340,9 +471,10 @@ function populateDynamicTooltip(tooltipElement, scoreDetails, emailId) {
         scoreIcon = '?';
         displayText = 'Error';
         confidenceScore = 0;
-    } else if (scoreDetails.level === 'safe') {
-        scoreColor = '#22c55e'; // green for safe
-        scoreIcon = '✓';
+    } else {
+        // Unknown or unmapped level - default to grey, not green
+        scoreColor = '#6b7280';
+        scoreIcon = '?';
     }
 
     const htmlContent = `
@@ -374,11 +506,19 @@ function populateDynamicTooltip(tooltipElement, scoreDetails, emailId) {
                 </div>
             </div>
 
-            <!-- Key Risk Indicators Section -->
+            <!-- Key Risk Indicators Section (hidden on error) -->
+            ${scoreDetails.level === 'error' ? `
+            <div style="padding: 18px 20px 16px;">
+                <div style="background: #fef2f2; border-radius: 8px; padding: 16px; border-left: 3px solid #ef4444;">
+                    <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: #991b1b;">Analysis Failed</p>
+                    <p style="margin: 0; font-size: 12px; color: #7f1d1d; line-height: 1.4;">${scoreDetails.message || 'An error occurred during analysis. Please try again.'}</p>
+                </div>
+            </div>
+            ` : `
             <div style="padding: 18px 20px 16px;">
                 <h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #1e293b;">Key Risk Indicators</h4>
                 <div style="display: flex; flex-direction: column; gap: 8px;">
-                    ${generateIndicatorRows(scoreDetails.indicators || {}, scoreDetails.aiAnalysisDetails || {})}
+                    ${generateIndicatorRows(scoreDetails.indicators || {}, scoreDetails.aiAnalysisDetails || {}, scoreDetails.level || 'unknown', scoreDetails.tierFeatures || {})}
                 </div>
             </div>
 
@@ -406,6 +546,25 @@ function populateDynamicTooltip(tooltipElement, scoreDetails, emailId) {
                     </a>
                 </div>
             </div>
+            `}
+
+                ${scoreDetails.showAds ? `
+                    <div style="padding: 12px 20px; border-top: 1px solid #f1f5f9; text-align: center; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);">
+                        <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #0369a1;">Unlock Full Protection</p>
+                        <p style="margin: 0 0 8px 0; font-size: 11px; color: #64748b;">Auto-scan, sender verification, safe link checking & more</p>
+                        <a href="https://phisharmor.com/pricing" target="_blank" 
+                           style="display: inline-block; padding: 6px 16px; background: #2563eb; color: white; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 500;">
+                            Try Premium Free — 7 Days
+                        </a>
+                    </div>
+                ` : ''}
+
+                ${scoreDetails.scanInfo ? `
+                    <div style="padding: 8px 20px; border-top: 1px solid #f1f5f9; text-align: center;">
+                        <p style="margin: 0; font-size: 11px; color: #94a3b8;">${scoreDetails.scanInfo.daily_scans_used} of ${scoreDetails.scanInfo.daily_scan_limit} scans used today</p>
+                    </div>
+                ` : ''}
+            </div>
         </div>
         
         <!-- No more script tag - JavaScript will be added programmatically -->
@@ -427,11 +586,12 @@ function populateDynamicTooltip(tooltipElement, scoreDetails, emailId) {
     });
 }
 
-function generateIndicatorRows(indicators, aiAnalysisDetails = {}) {
+function generateIndicatorRows(indicators, aiAnalysisDetails = {}, overallLevel = 'unknown', tierFeatures = {}) {
     const indicatorConfigs = [
         { 
             key: 'suspiciousSenderAddress', 
-            label: 'Verified Sender', 
+            label: 'Verified Sender',
+            premiumFeatureKey: 'sender_verification',
             positiveIf: false,
             goodText: 'Sender verified',
             badText: 'Sender suspicious',
@@ -467,7 +627,8 @@ function generateIndicatorRows(indicators, aiAnalysisDetails = {}) {
         },
         { 
             key: 'suspiciousLinks', 
-            label: 'Safe Links', 
+            label: 'Safe Links',
+            premiumFeatureKey: 'safe_link_checking',
             positiveIf: false,
             goodText: 'No malicious URLs',
             badText: 'Suspicious links found',
@@ -481,7 +642,8 @@ function generateIndicatorRows(indicators, aiAnalysisDetails = {}) {
         },
         { 
             key: 'urgentLanguage', 
-            label: 'Urgency Check', 
+            label: 'Urgency Check',
+            premiumFeatureKey: null,
             positiveIf: false,
             goodText: 'No urgency detected',
             badText: 'Urgent language found',
@@ -495,7 +657,8 @@ function generateIndicatorRows(indicators, aiAnalysisDetails = {}) {
         },
         { 
             key: 'requestsSensitiveInfo', 
-            label: 'Info Security', 
+            label: 'Info Security',
+            premiumFeatureKey: null,
             positiveIf: false,
             goodText: 'No data requests',
             badText: 'Requests sensitive info',
@@ -509,7 +672,8 @@ function generateIndicatorRows(indicators, aiAnalysisDetails = {}) {
         },
         { 
             key: 'spellingMistakes', 
-            label: 'Grammar Check', 
+            label: 'Grammar Check',
+            premiumFeatureKey: null,
             positiveIf: false,
             goodText: 'Good grammar',
             badText: 'Grammar issues found',
@@ -527,6 +691,22 @@ function generateIndicatorRows(indicators, aiAnalysisDetails = {}) {
     console.log("PhishArmor: AI analysis details available:", aiAnalysisDetails);
 
     return indicatorConfigs.map((config, configIndex) => {
+        const isLocked = config.premiumFeatureKey && tierFeatures[config.premiumFeatureKey] === false;
+
+        if (isLocked) {
+            return `
+                <div style="display: flex; flex-direction: column;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; opacity: 0.7;">
+                        <span style="font-weight: 500; color: #94a3b8; font-size: 13px;">${config.label}</span>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span style="font-size: 11px; color: #94a3b8;">Premium feature</span>
+                            <div style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #cbd5e1; color: white; font-size: 8px;">🔒</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         const isPresent = indicators[config.key] && indicators[config.key].present;
         const isGood = config.positiveIf ? isPresent : !isPresent;
         
@@ -565,16 +745,14 @@ function generateIndicatorRows(indicators, aiAnalysisDetails = {}) {
         
         console.log(`PhishArmor: Indicator ${config.key}: isPresent=${isPresent}, isGood=${isGood}, shouldShowDropdown=${shouldShowDropdown}`);
         
+        // For non-safe emails, auto-expand flagged indicators so users see the details immediately
+        const isNonSafe = overallLevel !== 'safe';
+        const autoExpand = shouldShowDropdown && isNonSafe;
+
         // Generate the dropdown content only if needed
         const dropdownContent = shouldShowDropdown ? `
-            <div id="dropdown-${configIndex}" style="display: none; margin-top: 8px; padding: 10px; background: #f9fafb; border-radius: 4px; border: 1px solid #e5e7eb;">
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
-                    </svg>
-                    <span style="font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase;">Analysis Details</span>
-                </div>
-                <p style="margin: 0; font-size: 12px; color: #374151; line-height: 1.4;">${detailText}</p>
+            <div id="dropdown-${configIndex}" style="display: ${autoExpand ? 'block' : 'none'}; margin-top: 8px; padding: 10px; background: #f9fafb; border-radius: 4px; border-left: 3px solid ${iconColor}; border-top: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;">
+                <p style="margin: 0; font-size: 12px; color: #374151; line-height: 1.5;">${detailText}</p>
             </div>
         ` : '';
         
@@ -589,7 +767,7 @@ function generateIndicatorRows(indicators, aiAnalysisDetails = {}) {
                         <div style="display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: ${iconColor}; color: white; font-size: 10px; font-weight: bold;">
                             ${icon}
                         </div>
-                        ${shouldShowDropdown ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" style="transition: transform 0.2s ease;" id="arrow-${configIndex}"><path d="M6 9l6 6 6-6"></path></svg>` : ''}
+                        ${shouldShowDropdown ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" style="transition: transform 0.2s ease; ${autoExpand ? 'transform: rotate(180deg);' : ''}" id="arrow-${configIndex}"><path d="M6 9l6 6 6-6"></path></svg>` : ''}
                     </div>
                 </div>
                 ${dropdownContent}
@@ -776,16 +954,23 @@ function processOpenEmail(emailContainer, emailActionToolbar) {
     // Set the current open email ID for shield updates
     currentOpenEmailId = emailId;
 
-    // Check if we already have a stored score for this email
-    chrome.storage.local.get([`emailScore_${emailId}`], function(result) {
+    // Check if we already have a stored score for this email (check both new and legacy cache keys)
+    const cacheKey = `emailCache_${emailId}`;
+    const legacyKey = `emailScore_${emailId}`;
+    chrome.storage.local.get([cacheKey, legacyKey], function(result) {
         if (chrome.runtime.lastError) {
             console.error("PhishArmor: Storage access error:", chrome.runtime.lastError.message);
             return;
         }
 
-        if (result[`emailScore_${emailId}`]) {
+        // Check new cache format first, then legacy
+        const cachedEntry = result[cacheKey];
+        const legacyEntry = result[legacyKey];
+        const cached = cachedEntry ? cachedEntry.result : (legacyEntry ? legacyEntry.scoreDetails : null);
+
+        if (cached && cached.level && cached.level !== 'error') {
             console.log("PhishArmor: Found existing score for:", emailId);
-            injectShieldIconOpenView(emailId, result[`emailScore_${emailId}`].scoreDetails, emailActionToolbar);
+            injectShieldIconOpenView(emailId, cached, emailActionToolbar);
         } else {
             console.log("PhishArmor: No score for open email ID:", emailId, ". Extracting data globally.");
             // Inject loading shield first
@@ -818,9 +1003,12 @@ function processOpenEmail(emailContainer, emailActionToolbar) {
                 emailDataSubject: extractedEmailData.subject
             });
             
+            // Add triggerType for auto-triggered analysis
+            const emailDataWithTrigger = { ...extractedEmailData, triggerType: 'auto' };
+            
             chrome.runtime.sendMessage({
                 action: "analyzeEmail",
-                emailData: extractedEmailData
+                emailData: emailDataWithTrigger
             }, function(response) {
                 console.timeEnd(`PhishArmor Analysis ${emailId}`);
                 console.log("PhishArmor: Background script response:", response);
@@ -921,17 +1109,18 @@ function extractEmailDataFromDOM(emailId, subjectElement) {
         console.log("PhishArmor DEBUG: Found", candidateBodyElements.length, "candidate elements, but none met criteria.");
     }
 
-    if (!subject || (!bodyText.trim() && !bodyHtml.trim())) {
-        console.error("PhishArmor: Insufficient email data extracted");
+    if (!subject && !bodyText.trim() && !bodyHtml.trim()) {
+        console.error("PhishArmor: Insufficient email data extracted — no subject or body found");
         return null;
     }
 
+    // Always return data even if body is empty — backend has safe defaults
     return {
         id: emailId,
-        sender: sender,
-        subject: subject,
-        bodyText: bodyText.substring(0, 8000), 
-        bodyHtml: bodyHtml.substring(0, 15000)
+        sender: sender || 'unknown@unknown.com',
+        subject: subject || '(No subject)',
+        bodyText: (bodyText || '').substring(0, 8000),
+        bodyHtml: (bodyHtml || '').substring(0, 15000)
     };
 }
 
@@ -1101,7 +1290,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         
         if (message.emailId === currentOpenEmailId) { // currentOpenEmailId refers to the main email view
-            const emailActionToolbar = document.querySelector('div[gh="mtb"][data-phisharmor-processed]');
+            // Try processed toolbar first, then fall back to any visible toolbar
+            let emailActionToolbar = document.querySelector('div[gh="mtb"][data-phisharmor-processed]');
+            if (!emailActionToolbar) {
+                emailActionToolbar = document.querySelector('div[gh="mtb"]');
+                if (emailActionToolbar) {
+                    // Re-mark it as processed since Gmail may have re-rendered the toolbar
+                    emailActionToolbar.dataset.phisharmorProcessed = message.emailId;
+                    console.log("PhishArmor (Content): Re-marked toolbar as processed after Gmail re-render");
+                }
+            }
             if (emailActionToolbar) {
                 injectShieldIconOpenView(message.emailId, message.scoreDetails, emailActionToolbar);
                 // If this update is for the email whose tooltip is currently open, refresh the tooltip

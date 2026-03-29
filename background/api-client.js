@@ -268,6 +268,26 @@ async function updateUserSettings(updates) {
 }
 
 /**
+ * Get user tier information (authenticated only).
+ */
+async function getUserTier() {
+  return apiRequest('/tier', {
+    method: 'GET',
+    requireAuth: true,
+  });
+}
+
+/**
+ * Start a trial for the user (authenticated only).
+ */
+async function startTrial() {
+  return apiRequest('/trial/start', {
+    method: 'POST',
+    requireAuth: true,
+  });
+}
+
+/**
  * Check backend health (no auth needed).
  */
 async function checkBackendHealth() {
@@ -294,6 +314,8 @@ if (typeof globalThis !== 'undefined') {
     getUserStats,
     getUserSettings,
     updateUserSettings,
+    getUserTier,
+    startTrial,
     checkBackendHealth,
     getAuthToken,
     ApiError,

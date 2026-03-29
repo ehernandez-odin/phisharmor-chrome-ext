@@ -22,6 +22,40 @@ const Auth = globalThis.PhishArmorAuth;
 const Storage = globalThis.PhishArmorStorage;
 
 // ---------------------------------------------------------------------------
+// Tier Info Cache
+// ---------------------------------------------------------------------------
+
+let cachedTierInfo = null;
+let tierCacheExpiry = 0;
+const TIER_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedTierInfo(forceRefresh = false) {
+  if (!forceRefresh && cachedTierInfo && Date.now() < tierCacheExpiry) {
+    return cachedTierInfo;
+  }
+  try {
+    cachedTierInfo = await API.getUserTier();
+    tierCacheExpiry = Date.now() + TIER_CACHE_TTL;
+    return cachedTierInfo;
+  } catch (err) {
+    console.warn('PhishArmor: Failed to fetch tier info, using cached or defaults', err);
+    if (cachedTierInfo) return cachedTierInfo;
+    // Default to free tier
+    return {
+      tier: 'free', plan: 'free', daily_scan_limit: 5,
+      daily_scans_used: 0, scans_remaining: 5,
+      can_auto_scan: false, can_scan: true, show_ads: true,
+      trial_ends_at: null, trial_days_remaining: null,
+      features: {
+        auto_scan: false, sender_verification: false,
+        safe_link_checking: false, full_scan_history: false,
+        export: false, priority_support: false, ad_free: false
+      }
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Installation & Update Handlers
 // ---------------------------------------------------------------------------
 
@@ -165,6 +199,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       handleUpdateSettings(message.settings, sendResponse);
       return true;
 
+    // --- Tier Management ---
+    case 'getTierInfo':
+      getCachedTierInfo().then(tierInfo => sendResponse({ success: true, tierInfo }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
+    case 'startTrial':
+      handleStartTrial(sendResponse);
+      return true;
+
+    case 'refreshTierInfo':
+      getCachedTierInfo(true).then(tierInfo => sendResponse({ success: true, tierInfo }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true;
+
     // --- Health Check ---
     case 'checkHealth':
       API.checkBackendHealth().then(result => sendResponse(result));
@@ -190,10 +239,69 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
   try {
+    // 0. Check authentication and tier gating
+    const isAuthed = await Auth.isAuthenticated();
+    if (!isAuthed) {
+      // User not logged in — show login required shield
+      const loginDetails = {
+        level: 'login_required',
+        score: 'Login Required',
+        message: 'Please log in to scan emails.',
+        indicators: {},
+        aiAnalysisDetails: {},
+      };
+      // Cache so tooltip can display it
+      await Storage.cacheAnalysisResult(emailData.id, loginDetails);
+      sendShieldUpdate(tabId, emailData.id, loginDetails);
+      return;
+    }
+
+    // Get tier info for analysis gating
+    const tierInfo = await getCachedTierInfo();
+
+    // Check if auto-scan is being triggered but not allowed
+    if (emailData.triggerType === 'auto' && !tierInfo.can_auto_scan) {
+      console.log('PhishArmor: Auto-scan not allowed for tier', tierInfo.tier);
+      const manualDetails = {
+        level: 'manual',
+        score: 'Manual Only',
+        message: 'Click the shield to scan this email. Free plan supports manual scanning only.',
+        indicators: {},
+        aiAnalysisDetails: {},
+      };
+      // Cache so tooltip can display it
+      await Storage.cacheAnalysisResult(emailData.id, manualDetails);
+      sendShieldUpdate(tabId, emailData.id, manualDetails);
+      return;
+    }
+
+    // Check if scanning is allowed at all
+    if (!tierInfo.can_scan) {
+      console.log('PhishArmor: Scanning limit reached for tier', tierInfo.tier);
+      const limitDetails = {
+        level: 'limit_reached',
+        score: 'Limit Reached',
+        message: 'Your daily scan limit has been reached. Please try again tomorrow.',
+        indicators: {},
+        aiAnalysisDetails: {},
+        scanInfo: {
+          daily_scans_used: tierInfo.daily_scans_used,
+          daily_scan_limit: tierInfo.daily_scan_limit,
+        },
+      };
+      // Cache so tooltip can display it
+      await Storage.cacheAnalysisResult(emailData.id, limitDetails);
+      sendShieldUpdate(tabId, emailData.id, limitDetails);
+      return;
+    }
+
     // 1. Check cache first (unless forced)
+    //    Skip cached non-analysis states (manual, login_required, limit_reached, error)
+    //    so that manual re-scans and post-login scans proceed to actual analysis.
     if (!forceDisplay) {
       const cached = await Storage.getCachedResult(emailData.id);
-      if (cached) {
+      const nonAnalysisLevels = ['manual', 'login_required', 'limit_reached', 'loading', 'error'];
+      if (cached && !nonAnalysisLevels.includes(cached.level)) {
         console.log('PhishArmor: Using cached result for', emailData.id);
         sendShieldUpdate(tabId, emailData.id, cached);
         return;
@@ -227,10 +335,15 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
     // 5. Cache the result
     await Storage.cacheAnalysisResult(emailData.id, scoreDetails);
 
-    // 6. Increment scan counter
+    // 6. Increment scan counter and update tier cache
     await Storage.incrementCounter('emailsScannedCount');
     if (scoreDetails.level === 'high' || scoreDetails.level === 'critical') {
       await Storage.incrementCounter('flaggedEmailsCount');
+    }
+    // Update cached tier's daily_scans_used counter
+    if (cachedTierInfo) {
+      cachedTierInfo.daily_scans_used = (cachedTierInfo.daily_scans_used || 0) + 1;
+      cachedTierInfo.scans_remaining = Math.max(0, cachedTierInfo.daily_scan_limit - cachedTierInfo.daily_scans_used);
     }
 
     // 7. Update the shield icon
@@ -248,13 +361,19 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
     const errorDetails = {
       level: 'error',
       score: 'Error',
+      color: 'grey',
       message: error.isNetworkError
         ? 'Unable to reach PhishArmor servers. Please check your connection.'
         : error.isAuthError
         ? 'Please log in to continue scanning.'
         : `Analysis failed: ${error.message || 'Unknown error'}. Please try again.`,
       error: error.message,
+      indicators: {},
+      aiAnalysisDetails: {},
     };
+
+    // Cache error results so the tooltip can display them
+    await Storage.cacheAnalysisResult(emailData.id, errorDetails);
 
     sendShieldUpdate(tabId, emailData.id, errorDetails);
   }
@@ -274,7 +393,7 @@ function buildScoreDetails(result, emailData, elapsedMs) {
     level = 'safe';
     score = 'Safe';
     color = 'green';
-  } else if (['medium', 'moderate', 'caution needed'].includes(riskLevel)) {
+  } else if (['medium', 'moderate', 'caution needed', 'suspicious'].includes(riskLevel)) {
     level = 'medium';
     score = 'Caution';
     color = 'yellow';
@@ -288,6 +407,45 @@ function buildScoreDetails(result, emailData, elapsedMs) {
     color = 'grey';
   }
 
+  // Build the indicators object that the tooltip's generateIndicatorRows expects
+  const urgentLanguage = result.urgent_language_detected || result.urgentLanguageAI || false;
+  const sensitiveInfo = result.sensitive_info_requested || result.requestsSensitiveInfoAI || false;
+  const grammarIssues = result.grammar_issues_detected || result.grammarIssuesAI || false;
+  const suspiciousSender = result.suspicious_sender || result.suspiciousSender || (level !== 'safe' && result.domain_reputation?.risk === 'high') || false;
+  const suspiciousLinks = result.suspicious_links_detected || result.suspiciousLinks || (result.url_threats && result.url_threats.length > 0) || false;
+
+  const indicators = {
+    suspiciousSenderAddress: {
+      present: suspiciousSender,
+      reason: result.sender_analysis || result.senderAnalysis || result.domain_reputation?.summary || '',
+    },
+    suspiciousLinks: {
+      present: suspiciousLinks,
+      reason: result.link_analysis || result.linkAnalysis || (result.url_threats ? `${result.url_threats.length} suspicious URL(s) detected` : ''),
+    },
+    urgentLanguage: {
+      present: urgentLanguage,
+      reason: result.urgent_language_details || result.urgentLanguageDetails || '',
+    },
+    requestsSensitiveInfo: {
+      present: sensitiveInfo,
+      reason: result.sensitive_info_details || result.sensitiveInfoDetails || '',
+    },
+    spellingMistakes: {
+      present: grammarIssues,
+      reason: result.grammar_details || result.grammarDetails || '',
+    },
+  };
+
+  // Build aiAnalysisDetails for the tooltip's detail text in each indicator dropdown
+  const aiAnalysisDetails = {
+    technicalSecuritySummary: result.technical_security_summary || result.technicalSecuritySummary || '',
+    urgentLanguageDetails: result.urgent_language_details || result.urgentLanguageDetails || '',
+    sensitiveInfoDetails: result.sensitive_info_details || result.sensitiveInfoDetails || '',
+    grammarQualityDetails: result.grammar_details || result.grammarDetails || '',
+    userRecommendation: result.user_recommendation || result.userRecommendation || '',
+  };
+
   return {
     level,
     score,
@@ -296,9 +454,11 @@ function buildScoreDetails(result, emailData, elapsedMs) {
     confidence: result.confidence || 0,
     overallAssessment: result.overall_assessment || result.overallAssessment || '',
     reasoning: result.reasoning || [],
-    urgentLanguage: result.urgent_language_detected || result.urgentLanguageAI || false,
-    sensitiveInfo: result.sensitive_info_requested || result.requestsSensitiveInfoAI || false,
-    grammarIssues: result.grammar_issues_detected || result.grammarIssuesAI || false,
+    indicators,
+    aiAnalysisDetails,
+    urgentLanguage,
+    sensitiveInfo,
+    grammarIssues,
     urgentLanguageDetails: result.urgent_language_details || result.urgentLanguageDetails || '',
     sensitiveInfoDetails: result.sensitive_info_details || result.sensitiveInfoDetails || '',
     grammarDetails: result.grammar_details || result.grammarDetails || '',
@@ -348,6 +508,9 @@ async function handleAuthenticate(message, sendResponse) {
     }
 
     if (result.success) {
+      // Invalidate tier cache on login
+      cachedTierInfo = null;
+      tierCacheExpiry = 0;
       // Fetch user stats after login
       try {
         const stats = await API.getUserStats();
@@ -377,6 +540,9 @@ async function handleLogout(sendResponse) {
   try {
     await Auth.signOut();
     await Storage.clearCache();
+    // Invalidate tier cache on logout
+    cachedTierInfo = null;
+    tierCacheExpiry = 0;
     sendResponse({ success: true });
   } catch (error) {
     sendResponse({ success: false, error: error.message });
@@ -509,6 +675,18 @@ async function handleGetReportData(emailId, sendResponse) {
     }
   } catch (error) {
     sendResponse({ error: 'Failed to retrieve report data' });
+  }
+}
+
+async function handleStartTrial(sendResponse) {
+  try {
+    const result = await API.startTrial();
+    // Invalidate tier cache so it refreshes on next call
+    cachedTierInfo = null;
+    tierCacheExpiry = 0;
+    sendResponse({ success: true, result });
+  } catch (error) {
+    sendResponse({ success: false, error: error.message });
   }
 }
 

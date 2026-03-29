@@ -80,6 +80,39 @@ class PopupManager {
       logoutBtn.addEventListener('click', () => this.handleLogout());
     }
 
+    // Upgrade button (free users - start trial)
+    const upgradeBtn = document.getElementById('btn-upgrade');
+    if (upgradeBtn) {
+      upgradeBtn.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-upgrade');
+        btn.disabled = true;
+        btn.textContent = 'Starting trial...';
+        try {
+          const response = await new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: 'startTrial' }, resolve);
+          });
+          if (response && response.success) {
+            await this.loadTierInfo(); // Refresh tier display
+          } else {
+            // If trial already used, redirect to pricing
+            window.open('https://phisharmor.com/pricing', '_blank');
+          }
+        } catch (e) {
+          window.open('https://phisharmor.com/pricing', '_blank');
+        }
+        btn.disabled = false;
+        btn.textContent = 'Try Premium Free — 7 Days';
+      });
+    }
+
+    // Subscribe button (trial users)
+    const subscribeBtn = document.getElementById('btn-subscribe');
+    if (subscribeBtn) {
+      subscribeBtn.addEventListener('click', () => {
+        window.open('https://phisharmor.com/pricing', '_blank');
+      });
+    }
+
     // Escape to close
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') window.close();
@@ -255,6 +288,62 @@ class PopupManager {
       }
     } catch (error) {
       console.warn('Failed to load stats:', error);
+    }
+
+    // Load tier information
+    await this.loadTierInfo();
+  }
+
+  async loadTierInfo() {
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'getTierInfo' }, resolve);
+      });
+
+      if (!response || !response.success) return;
+
+      const tierInfo = response.tierInfo;
+      const tierSection = document.getElementById('tier-section');
+      const tierFree = document.getElementById('tier-free');
+      const tierTrial = document.getElementById('tier-trial');
+      const tierPremium = document.getElementById('tier-premium');
+
+      // Hide all tiers first
+      tierFree.style.display = 'none';
+      tierTrial.style.display = 'none';
+      tierPremium.style.display = 'none';
+
+      tierSection.style.display = 'block';
+
+      const used = tierInfo.daily_scans_used || 0;
+      const limit = tierInfo.daily_scan_limit || 5;
+      const pct = Math.min(100, Math.round((used / limit) * 100));
+
+      if (tierInfo.tier === 'free') {
+        tierFree.style.display = 'block';
+        tierSection.style.background = '#f8fafc';
+        tierSection.style.border = '1px solid #e2e8f0';
+        document.getElementById('scan-count-text').textContent = `${used} of ${limit} scans used today`;
+        document.getElementById('scan-progress-bar').style.width = `${pct}%`;
+        // Change bar color when near limit
+        if (pct >= 80) document.getElementById('scan-progress-bar').style.background = '#ef4444';
+        else if (pct >= 60) document.getElementById('scan-progress-bar').style.background = '#f59e0b';
+      } else if (tierInfo.tier === 'trial') {
+        tierTrial.style.display = 'block';
+        tierSection.style.background = '#f0f9ff';
+        tierSection.style.border = '1px solid #bae6fd';
+        document.getElementById('trial-days-text').textContent = `${tierInfo.trial_days_remaining || 0} days remaining`;
+        document.getElementById('trial-scan-count').textContent = `${used} of ${limit} scans used today`;
+        document.getElementById('trial-progress-bar').style.width = `${pct}%`;
+      } else if (tierInfo.tier === 'premium') {
+        tierPremium.style.display = 'block';
+        tierSection.style.background = '#f0fdf4';
+        tierSection.style.border = '1px solid #bbf7d0';
+        document.getElementById('premium-scan-count').textContent = `${used} of ${limit} scans used today`;
+        document.getElementById('premium-progress-bar').style.width = `${pct}%`;
+      }
+    } catch (e) {
+      console.error('PhishArmor: Error loading tier info:', e);
     }
   }
 
