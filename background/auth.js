@@ -15,6 +15,10 @@
 const SUPABASE_URL = 'https://indcrrlvpotinxdhrthg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluZGNycmx2cG90aW54ZGhydGhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk4NDg2MzcsImV4cCI6MjA2NTQyNDYzN30.9RBDGPfVD1O67vV0xk4sU9ptHgI4rt4M3bi1LNciXC8';
 
+// Google OAuth client ID (same as configured in Supabase Google provider)
+// This is a public identifier — safe to include in the extension
+const GOOGLE_CLIENT_ID = '251428187667-bjoqfhiam0rml4fsa9srqf51j7n5e73p.apps.googleusercontent.com';
+
 const AUTH_ENDPOINTS = {
   signUp: `${SUPABASE_URL}/auth/v1/signup`,
   signIn: `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
@@ -112,40 +116,40 @@ async function signIn(email, password) {
 }
 
 /**
- * Sign in with Google OAuth using PKCE flow.
+ * Sign in with Google OAuth — Direct Google flow.
  *
- * PKCE (Proof Key for Code Exchange) is required for Chrome extensions because
- * chrome.identity.launchWebAuthFlow doesn't reliably persist cookies across
- * the OAuth redirect chain. Without PKCE, Supabase loses the redirect_to URL
- * (stored in a cookie) and falls back to the Site URL instead of returning
- * tokens to the extension.
+ * Authenticates directly with Google's OAuth endpoint (bypassing Supabase's
+ * /auth/v1/authorize redirect), then exchanges the Google token with Supabase.
  *
- * PKCE flow:
- * 1. Generate code_verifier + code_challenge (URL params, no cookies needed)
- * 2. Supabase redirects back with ?code=xxx (not #access_token)
- * 3. Extension exchanges code + code_verifier for tokens via POST
+ * Why: Supabase's OAuth redirect stores redirect_to in a cookie, which
+ * doesn't persist inside chrome.identity.launchWebAuthFlow's popup. The
+ * redirect lands on the portal Site URL instead of the extension.
+ *
+ * Flow:
+ * 1. launchWebAuthFlow → Google's OAuth endpoint directly
+ * 2. Google redirects to chromiumapp.org with access_token in hash
+ * 3. Exchange Google token with Supabase via signInWithIdToken
+ * 4. Store Supabase session + Google token for Gmail API
  */
 async function signInWithGoogle() {
   try {
-    // 1. Generate PKCE code verifier and challenge
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = await generateCodeChallenge(codeVerifier);
-    console.log('PhishArmor Auth: Starting Google OAuth with PKCE flow');
-
-    // 2. Build the OAuth URL with PKCE params
     const redirectUrl = chrome.identity.getRedirectURL();
-    console.log('PhishArmor Auth: Redirect URL:', redirectUrl);
+    console.log('PhishArmor Auth: Starting direct Google OAuth. Redirect URL:', redirectUrl);
 
-    const authUrl = new URL(AUTH_ENDPOINTS.signInWithOAuth);
-    authUrl.searchParams.set('provider', 'google');
-    authUrl.searchParams.set('redirect_to', redirectUrl);
-    // PKCE parameters — state is carried in URL, not cookies
-    authUrl.searchParams.set('code_challenge', codeChallenge);
-    authUrl.searchParams.set('code_challenge_method', 'S256');
-    // Request Gmail read-only access for email analysis via Gmail API
-    authUrl.searchParams.set('scopes', 'https://www.googleapis.com/auth/gmail.readonly');
+    // Generate a nonce for security
+    const nonce = generateNonce();
 
-    // 3. Launch the OAuth flow
+    // Build Google's OAuth URL directly (NOT Supabase's authorize endpoint)
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri', redirectUrl);
+    authUrl.searchParams.set('response_type', 'token id_token');
+    authUrl.searchParams.set('scope', 'openid email profile https://www.googleapis.com/auth/gmail.readonly');
+    authUrl.searchParams.set('nonce', nonce);
+    authUrl.searchParams.set('prompt', 'consent');
+    authUrl.searchParams.set('access_type', 'online');
+
+    // Launch OAuth flow — Google redirects DIRECTLY to chromiumapp.org (no Supabase middleman)
     const responseUrl = await new Promise((resolve, reject) => {
       chrome.identity.launchWebAuthFlow(
         { url: authUrl.toString(), interactive: true },
@@ -159,77 +163,77 @@ async function signInWithGoogle() {
       );
     });
 
-    console.log('PhishArmor Auth: OAuth callback received');
+    console.log('PhishArmor Auth: Google OAuth callback received');
 
-    // 4. Extract the authorization code from the callback URL
-    //    PKCE returns ?code=xxx in query params (not #access_token in hash)
+    // Extract tokens from the callback hash
     const url = new URL(responseUrl);
-    const authCode = url.searchParams.get('code');
+    const hashParams = new URLSearchParams(url.hash.substring(1));
 
-    // Check for errors in the callback
-    const oauthError = url.searchParams.get('error') || new URLSearchParams(url.hash.substring(1)).get('error');
-    const oauthErrorDesc = url.searchParams.get('error_description') || new URLSearchParams(url.hash.substring(1)).get('error_description');
+    // Check for errors
+    const oauthError = hashParams.get('error');
     if (oauthError) {
-      console.error('PhishArmor Auth: OAuth returned error:', oauthError, oauthErrorDesc);
-      throw new Error(oauthErrorDesc || oauthError || 'OAuth authentication failed');
+      const desc = hashParams.get('error_description') || oauthError;
+      console.error('PhishArmor Auth: Google OAuth error:', desc);
+      throw new Error(desc);
     }
 
-    if (!authCode) {
-      // Fallback: check if tokens were returned in hash (implicit flow)
-      const hashParams = new URLSearchParams(url.hash.substring(1));
-      const fallbackToken = hashParams.get('access_token');
-      if (fallbackToken) {
-        console.log('PhishArmor Auth: Got implicit flow tokens (fallback)');
-        return await handleImplicitTokens(hashParams);
-      }
-      console.error('PhishArmor Auth: No code or access_token in callback.',
-        'Query:', url.search, 'Hash present:', !!url.hash);
-      throw new Error('No authorization code received from OAuth flow');
+    const googleAccessToken = hashParams.get('access_token');
+    const googleIdToken = hashParams.get('id_token');
+
+    if (!googleAccessToken && !googleIdToken) {
+      console.error('PhishArmor Auth: No tokens in Google callback. Hash length:', url.hash.length);
+      throw new Error('No tokens received from Google');
     }
 
-    console.log('PhishArmor Auth: Got authorization code, exchanging for tokens...');
+    console.log('PhishArmor Auth: Google tokens received — access:', !!googleAccessToken,
+      'id_token:', !!googleIdToken);
 
-    // 5. Exchange the code + code_verifier for tokens
-    const tokenResponse = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=pkce`, {
+    // Exchange Google token with Supabase to create a Supabase session
+    const tokenPayload = { provider: 'google' };
+    if (googleIdToken) {
+      tokenPayload.id_token = googleIdToken;
+      tokenPayload.nonce = nonce;
+    }
+    if (googleAccessToken) {
+      tokenPayload.access_token = googleAccessToken;
+    }
+
+    console.log('PhishArmor Auth: Exchanging Google token with Supabase...');
+
+    const supabaseResponse = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=id_token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_ANON_KEY,
       },
-      body: JSON.stringify({
-        auth_code: authCode,
-        code_verifier: codeVerifier,
-      }),
+      body: JSON.stringify(tokenPayload),
     });
 
-    const tokenData = await tokenResponse.json();
+    const sessionData = await supabaseResponse.json();
 
-    if (!tokenResponse.ok) {
-      console.error('PhishArmor Auth: Token exchange failed:', tokenData);
-      throw new Error(tokenData.error_description || tokenData.msg || 'Token exchange failed');
+    if (!supabaseResponse.ok) {
+      console.error('PhishArmor Auth: Supabase token exchange failed:', sessionData);
+      throw new Error(sessionData.error_description || sessionData.msg || sessionData.error || 'Supabase sign-in failed');
     }
 
-    console.log('PhishArmor Auth: Token exchange successful');
+    console.log('PhishArmor Auth: Supabase session created successfully');
 
-    // 6. Store Supabase tokens
-    await storeTokens(tokenData);
-    scheduleTokenRefresh(tokenData.expires_in || 3600);
+    // Store Supabase tokens
+    await storeTokens(sessionData);
+    scheduleTokenRefresh(sessionData.expires_in || 3600);
 
-    // 7. Store Google provider token for Gmail API calls
-    const providerToken = tokenData.provider_token;
-    const providerRefreshToken = tokenData.provider_refresh_token;
-    if (providerToken) {
-      await storeGoogleToken(providerToken, providerRefreshToken);
-      console.log('PhishArmor Auth: Google provider token stored for Gmail API access');
-    } else {
-      console.warn('PhishArmor Auth: No Google provider token received — Gmail API calls may not work');
+    // Store Google access token for Gmail API calls
+    if (googleAccessToken) {
+      await storeGoogleToken(googleAccessToken, null);
+      console.log('PhishArmor Auth: Google access token stored for Gmail API');
     }
 
-    // 8. Get user profile and update sync storage
-    const user = tokenData.user || await getCurrentUser();
+    // Update sync storage with user email
+    const user = sessionData.user || await getCurrentUser();
     if (user?.email) {
       await chrome.storage.sync.set({ isLoggedIn: true, userEmail: user.email });
     }
+
     return { success: true, user };
 
   } catch (error) {
@@ -239,68 +243,12 @@ async function signInWithGoogle() {
 }
 
 /**
- * Handle implicit flow tokens (fallback if PKCE returns hash tokens).
+ * Generate a random nonce for OAuth security.
  */
-async function handleImplicitTokens(hashParams) {
-  const accessToken = hashParams.get('access_token');
-  const refreshToken = hashParams.get('refresh_token');
-  const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
-  const providerToken = hashParams.get('provider_token');
-  const providerRefreshToken = hashParams.get('provider_refresh_token');
-
-  await storeTokens({
-    access_token: accessToken,
-    refresh_token: refreshToken,
-    expires_in: expiresIn,
-  });
-  scheduleTokenRefresh(expiresIn);
-
-  if (providerToken) {
-    await storeGoogleToken(providerToken, providerRefreshToken);
-  }
-
-  const user = await getCurrentUser();
-  if (user?.email) {
-    await chrome.storage.sync.set({ isLoggedIn: true, userEmail: user.email });
-  }
-  return { success: true, user };
-}
-
-// ---------------------------------------------------------------------------
-// PKCE Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Generate a random code verifier for PKCE (43-128 chars, URL-safe).
- */
-function generateCodeVerifier() {
-  const array = new Uint8Array(32);
+function generateNonce() {
+  const array = new Uint8Array(16);
   crypto.getRandomValues(array);
-  return base64UrlEncode(array);
-}
-
-/**
- * Generate the code challenge from a code verifier using SHA-256.
- */
-async function generateCodeChallenge(codeVerifier) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(codeVerifier);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return base64UrlEncode(new Uint8Array(digest));
-}
-
-/**
- * Base64url encode a Uint8Array (RFC 7636 compliant).
- */
-function base64UrlEncode(bytes) {
-  let binary = '';
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
