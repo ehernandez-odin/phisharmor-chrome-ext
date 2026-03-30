@@ -105,13 +105,6 @@ class PopupManager {
       });
     }
 
-    // Subscribe button (trial users)
-    const subscribeBtn = document.getElementById('btn-subscribe');
-    if (subscribeBtn) {
-      subscribeBtn.addEventListener('click', () => {
-        window.open('https://phisharmor.com/pricing', '_blank');
-      });
-    }
 
     // Escape to close
     document.addEventListener('keydown', (e) => {
@@ -359,13 +352,8 @@ class PopupManager {
     if (explanation) explanation.textContent = stats.explanation || 'Open an email to start scanning.';
   }
 
-  async handleViewFlaggedEmails() {
-    try {
-      await this.sendMessage({ action: 'openFlaggedEmails' });
-      // TODO: Open dashboard URL when Phase 4 is built
-    } catch (error) {
-      this.handleError('Could not load flagged emails', error);
-    }
+  handleViewFlaggedEmails() {
+    chrome.tabs.create({ url: 'https://app.phisharmor.ai' });
   }
 
   // -----------------------------------------------------------------------

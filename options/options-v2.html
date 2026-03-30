@@ -1,91 +1,471 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PhishArmor Settings</title>
-  <link rel="stylesheet" type="text/css" href="options.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      min-height: 100vh;
+    }
+
+    .settings-wrapper {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    /* Header */
+    .settings-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .settings-header img {
+      width: 36px;
+      height: 36px;
+    }
+    .settings-header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    /* Cards */
+    .card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .card-header h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #0f172a;
+      letter-spacing: -0.01em;
+    }
+    .card-body {
+      padding: 16px 20px 20px;
+    }
+
+    /* Setting rows */
+    .setting-row {
+      padding: 14px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .setting-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .setting-row:first-child {
+      padding-top: 0;
+    }
+    .setting-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1e293b;
+      margin-bottom: 4px;
+    }
+    .setting-description {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+
+    /* Radio group */
+    .radio-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .radio-option:hover {
+      border-color: #94a3b8;
+      background: #f8fafc;
+    }
+    .radio-option.selected {
+      border-color: #3b82f6;
+      background: #eff6ff;
+    }
+    .radio-option input[type="radio"] {
+      accent-color: #3b82f6;
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      flex-shrink: 0;
+    }
+    .radio-option .radio-text {
+      font-size: 13px;
+      color: #334155;
+    }
+    .radio-option .radio-text strong {
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    /* Toggle switch */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .toggle-info {
+      flex: 1;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: #cbd5e1;
+      border-radius: 24px;
+      transition: 0.2s;
+    }
+    .toggle-slider:before {
+      content: "";
+      position: absolute;
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: #3b82f6;
+    }
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+    .toggle-switch input:disabled + .toggle-slider {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Lock notice */
+    .lock-notice {
+      display: none;
+      margin-top: 10px;
+      padding: 10px 14px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #1e40af;
+    }
+    .lock-notice a {
+      color: #2563eb;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .lock-notice a:hover {
+      text-decoration: underline;
+    }
+
+    /* Account card */
+    .account-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 4px 0;
+    }
+    .account-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #3b82f6;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .account-details {
+      flex: 1;
+      min-width: 0;
+    }
+    .account-email {
+      font-size: 14px;
+      font-weight: 500;
+      color: #1e293b;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .account-not-logged-in {
+      font-size: 13px;
+      color: #64748b;
+    }
+
+    /* Tier badge */
+    .tier-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin-top: 4px;
+    }
+    .tier-badge.free {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+    .tier-badge.trial {
+      background: #eff6ff;
+      color: #2563eb;
+    }
+    .tier-badge.premium {
+      background: #f0fdf4;
+      color: #16a34a;
+    }
+
+    /* Scan usage bar */
+    .scan-usage {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .scan-usage-text {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+    .scan-bar {
+      width: 100%;
+      height: 6px;
+      background: #e2e8f0;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .scan-bar-fill {
+      height: 100%;
+      background: #3b82f6;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+    .trial-notice {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #2563eb;
+      font-weight: 500;
+    }
+
+    /* About section */
+    .about-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13px;
+    }
+    .about-row:last-child { border-bottom: none; }
+    .about-label { color: #64748b; }
+    .about-value { color: #1e293b; font-weight: 500; }
+    .about-value a { color: #3b82f6; text-decoration: none; }
+    .about-value a:hover { text-decoration: underline; }
+
+    /* Save button */
+    .save-section {
+      margin-top: 8px;
+    }
+    .btn-save {
+      width: 100%;
+      padding: 12px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s ease;
+    }
+    .btn-save:hover {
+      background: #2563eb;
+    }
+    .btn-save:active {
+      background: #1d4ed8;
+    }
+
+    /* Status message */
+    .status-message {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      min-height: 20px;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h1>PhishArmor Settings</h1>
+  <div class="settings-wrapper">
+    <!-- Header -->
+    <div class="settings-header">
+      <img src="../assets/logo1.png" alt="PhishArmor">
+      <h1>PhishArmor Settings</h1>
+    </div>
 
-    <div class="section">
-      <h2>Analysis Preferences</h2>
-
-      <div class="api-section">
-        <h3>Sensitivity Level</h3>
-        <p class="description">Controls how aggressively PhishArmor flags emails. Higher sensitivity means more alerts but fewer missed threats.</p>
-
-        <div class="radio-group">
-          <label>
-            <input type="radio" name="sensitivity" id="sensitivity-low" value="low">
-            Low — Only flag clearly dangerous emails
-          </label>
-          <label>
-            <input type="radio" name="sensitivity" id="sensitivity-medium" value="medium" checked>
-            Medium — Balanced detection (recommended)
-          </label>
-          <label>
-            <input type="radio" name="sensitivity" id="sensitivity-high" value="high">
-            High — Flag anything remotely suspicious
-          </label>
-        </div>
+    <!-- Account Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Account</h2>
       </div>
-
-      <div class="api-section">
-        <h3>Notifications</h3>
-        <div class="input-section">
-          <label>
-            <input type="checkbox" id="show-notifications" checked>
-            Show browser notifications for high-risk emails
-          </label>
+      <div class="card-body">
+        <div class="account-info">
+          <div class="account-avatar" id="account-avatar">?</div>
+          <div class="account-details">
+            <div class="account-email" id="account-email">Not connected</div>
+            <div id="account-not-logged-in" class="account-not-logged-in">Open the extension popup to sign in.</div>
+            <div id="tier-badge-container" style="display:none;">
+              <span class="tier-badge free" id="tier-badge">Free</span>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div class="api-section">
-        <h3>Auto-Analysis</h3>
-        <div class="input-section">
-          <label>
-            <input type="checkbox" id="auto-analyze" checked>
-            Automatically analyze emails when opened
-          </label>
-          <p class="help-text">When disabled, click the shield icon to manually trigger analysis.</p>
-        </div>
-        <div id="auto-analyze-lock" style="display: none; margin-top: 4px; padding: 8px 12px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px;">
-            <span style="font-size: 12px; color: #0369a1;">
-                🔒 Auto-scan is a Premium feature.
-                <a href="https://phisharmor.com/pricing" target="_blank" style="color: #2563eb; font-weight: 600; text-decoration: none;">Upgrade →</a>
-            </span>
+        <div class="scan-usage" id="scan-usage-section" style="display:none;">
+          <div class="scan-usage-text">
+            <span id="scan-usage-label">0 of 5 scans used today</span>
+            <span id="scan-usage-remaining">5 remaining</span>
+          </div>
+          <div class="scan-bar">
+            <div class="scan-bar-fill" id="scan-bar-fill" style="width: 0%;"></div>
+          </div>
+          <div class="trial-notice" id="trial-notice" style="display:none;"></div>
         </div>
       </div>
     </div>
 
-    <div class="section">
-      <h2>Account</h2>
-      <div class="api-section">
-        <p id="account-status" class="description">Not logged in</p>
-        <p id="account-plan" class="description" style="display:none;"></p>
-        <div id="tier-info-section" style="margin-top: 8px;">
-            <p id="account-tier" style="font-size: 13px; color: #475569; margin: 4px 0;"></p>
-            <p id="account-scans" style="font-size: 12px; color: #94a3b8; margin: 4px 0;"></p>
-            <p id="account-trial" style="font-size: 12px; color: #0369a1; margin: 4px 0; display: none;"></p>
+    <!-- Analysis Preferences Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Analysis Preferences</h2>
+      </div>
+      <div class="card-body">
+        <!-- Sensitivity -->
+        <div class="setting-row">
+          <div class="setting-label">Sensitivity Level</div>
+          <div class="setting-description">Controls how aggressively PhishArmor flags emails.</div>
+          <div class="radio-options">
+            <label class="radio-option">
+              <input type="radio" name="sensitivity" value="low">
+              <span class="radio-text"><strong>Low</strong> — Only flag clearly dangerous emails</span>
+            </label>
+            <label class="radio-option selected">
+              <input type="radio" name="sensitivity" value="medium" checked>
+              <span class="radio-text"><strong>Medium</strong> — Balanced detection (recommended)</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="sensitivity" value="high">
+              <span class="radio-text"><strong>High</strong> — Flag anything remotely suspicious</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="setting-row">
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="setting-label">Notifications</div>
+              <div class="setting-description" style="margin-bottom:0;">Show browser notifications for high-risk emails</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="show-notifications" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Auto-Analysis -->
+        <div class="setting-row">
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="setting-label">Auto-Analysis</div>
+              <div class="setting-description" style="margin-bottom:0;">Automatically analyze emails when opened</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="auto-analyze" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="lock-notice" id="auto-analyze-lock">
+            Auto-scan is a Premium feature. <a href="https://phisharmor.com/pricing" target="_blank">Upgrade &rarr;</a>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="section">
-      <h2>About</h2>
-      <div class="api-section">
-        <p class="description">PhishArmor v2.0.0</p>
-        <p class="description">All email analysis is performed securely through the PhishArmor backend. No API keys are stored in this extension.</p>
-        <p class="description"><a href="https://phisharmor.com/privacy" target="_blank">Privacy Policy</a></p>
+    <!-- About Card -->
+    <div class="card">
+      <div class="card-header">
+        <h2>About</h2>
+      </div>
+      <div class="card-body" style="padding-top:12px; padding-bottom:12px;">
+        <div class="about-row">
+          <span class="about-label">Version</span>
+          <span class="about-value">PhishArmor v2.1.0</span>
+        </div>
+        <div class="about-row">
+          <span class="about-label">Security</span>
+          <span class="about-value">All analysis via secure backend</span>
+        </div>
+        <div class="about-row">
+          <span class="about-label">Privacy</span>
+          <span class="about-value"><a href="https://phisharmor.com/privacy" target="_blank">Privacy Policy</a></span>
+        </div>
       </div>
     </div>
 
-    <div class="button-group">
-      <button id="saveSettingsButton" class="primary-button">Save Settings</button>
+    <!-- Save -->
+    <div class="save-section">
+      <button id="saveSettingsButton" class="btn-save">Save Settings</button>
+      <div id="statusMessage" class="status-message"></div>
     </div>
-
-    <div id="statusMessage" class="status-message"></div>
   </div>
 
   <script src="options-v2.js"></script>

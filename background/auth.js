@@ -122,6 +122,11 @@ async function signInWithGoogle() {
     const authUrl = new URL(AUTH_ENDPOINTS.signInWithOAuth);
     authUrl.searchParams.set('provider', 'google');
     authUrl.searchParams.set('redirect_to', redirectUrl);
+    // Request Gmail read-only access for email analysis via Gmail API
+    authUrl.searchParams.set('scopes', 'https://www.googleapis.com/auth/gmail.readonly');
+    // Request offline access so we get a Google refresh token
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'consent');
 
     // Use chrome.identity.launchWebAuthFlow for OAuth
     const responseUrl = await new Promise((resolve, reject) => {
@@ -143,6 +148,9 @@ async function signInWithGoogle() {
     const accessToken = hashParams.get('access_token');
     const refreshToken = hashParams.get('refresh_token');
     const expiresIn = parseInt(hashParams.get('expires_in') || '3600');
+    // Extract Google provider token for Gmail API access
+    const providerToken = hashParams.get('provider_token');
+    const providerRefreshToken = hashParams.get('provider_refresh_token');
 
     if (!accessToken) {
       throw new Error('No access token received from OAuth flow');
@@ -154,6 +162,14 @@ async function signInWithGoogle() {
       expires_in: expiresIn,
     });
     scheduleTokenRefresh(expiresIn);
+
+    // Store Google provider token for Gmail API calls
+    if (providerToken) {
+      await storeGoogleToken(providerToken, providerRefreshToken);
+      console.log('PhishArmor Auth: Google provider token stored for Gmail API access');
+    } else {
+      console.warn('PhishArmor Auth: No Google provider token received — Gmail API calls will not work');
+    }
 
     // Get user profile
     const user = await getCurrentUser();
@@ -321,10 +337,45 @@ async function getStoredAccessToken() {
   }
 }
 
+/**
+ * Store Google provider token for Gmail API access.
+ */
+async function storeGoogleToken(providerToken, providerRefreshToken) {
+  await chrome.storage.session.set({
+    googleAccessToken: providerToken,
+    googleRefreshToken: providerRefreshToken || null,
+  });
+  console.log('PhishArmor Auth: Google provider token stored');
+}
+
+/**
+ * Get the stored Google access token for Gmail API calls.
+ * Returns null if no token is available (user needs to re-auth with Gmail scope).
+ */
+async function getGoogleAccessToken() {
+  try {
+    const result = await chrome.storage.session.get(['googleAccessToken']);
+    return result.googleAccessToken || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Check if the user has Gmail API access (Google provider token stored).
+ */
+async function hasGmailAccess() {
+  const token = await getGoogleAccessToken();
+  return token !== null;
+}
+
 async function clearTokens() {
-  await chrome.storage.session.remove(['authToken', 'refreshToken', 'tokenExpiresAt']);
+  await chrome.storage.session.remove([
+    'authToken', 'refreshToken', 'tokenExpiresAt',
+    'googleAccessToken', 'googleRefreshToken',
+  ]);
   await chrome.storage.sync.set({ isLoggedIn: false, userEmail: null });
-  console.log('PhishArmor Auth: Tokens cleared');
+  console.log('PhishArmor Auth: All tokens cleared (Supabase + Google)');
 }
 
 
@@ -375,6 +426,8 @@ if (typeof globalThis !== 'undefined') {
     getCurrentUser,
     isAuthenticated,
     getStoredAccessToken,
+    getGoogleAccessToken,
+    hasGmailAccess,
     SUPABASE_URL,
   };
 }

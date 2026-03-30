@@ -12,14 +12,15 @@
  */
 
 // Load modules — importScripts must be at the top level in MV3 service workers
-importScripts('api-client.js', 'auth.js', 'storage.js');
+importScripts('api-client.js', 'auth.js', 'storage.js', 'gmail-api.js');
 
-console.log('PhishArmor Background v2.0 loaded.');
+console.log('PhishArmor Background v2.1 loaded (Gmail API).');
 
 // Module references (loaded via importScripts in manifest.json)
 const API = globalThis.PhishArmorAPI;
 const Auth = globalThis.PhishArmorAuth;
 const Storage = globalThis.PhishArmorStorage;
+const GmailAPI = globalThis.PhishArmorGmailAPI;
 
 // ---------------------------------------------------------------------------
 // Tier Info Cache
@@ -112,6 +113,109 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     handleEmailAnalysis(emailData, tab.id, true);
   }
 });
+
+
+// ---------------------------------------------------------------------------
+// External Message Handler (Portal → Extension Auth Bridge)
+// ---------------------------------------------------------------------------
+// The PhishArmor portal (app.phisharmor.ai) sends Supabase tokens after login.
+// This allows users who sign in on the web portal to automatically activate
+// their extension for scanning.
+
+chrome.runtime.onMessageExternal.addListener(async (message, sender, sendResponse) => {
+  // Only accept messages from PhishArmor domains
+  const allowedOrigins = [
+    'https://app.phisharmor.ai',
+    'https://phisharmor.ai',
+    'https://phisharmor.com',
+    'https://www.phisharmor.com',
+  ];
+
+  if (!allowedOrigins.some(origin => sender.url?.startsWith(origin))) {
+    console.warn('PhishArmor: Rejected external message from:', sender.url);
+    sendResponse({ success: false, error: 'Unauthorized origin' });
+    return;
+  }
+
+  if (message.action === 'setAuthToken' || message.action === 'portalLogin') {
+    try {
+      // Portal sends: { action: 'setAuthToken', token, userId, expiresAt }
+      // Also support: { action: 'portalLogin', access_token, refresh_token, expires_in, user_email }
+      const accessToken = message.token || message.access_token;
+      const refreshToken = message.refresh_token || null;
+      const userId = message.userId || null;
+      const userEmail = message.user_email || null;
+
+      if (!accessToken) {
+        sendResponse({ success: false, error: 'No access token provided' });
+        return;
+      }
+
+      // Calculate expiry: portal sends expiresAt (epoch seconds) or expires_in (seconds from now)
+      let tokenExpiresAt;
+      if (message.expiresAt) {
+        // Portal sends epoch seconds — convert to ms
+        tokenExpiresAt = message.expiresAt * 1000;
+      } else if (message.expires_in) {
+        tokenExpiresAt = Date.now() + (message.expires_in * 1000);
+      } else {
+        tokenExpiresAt = Date.now() + (3600 * 1000); // Default 1 hour
+      }
+
+      // Store Supabase tokens (same keys as internal auth)
+      await chrome.storage.session.set({
+        authToken: accessToken,
+        refreshToken: refreshToken,
+        tokenExpiresAt: tokenExpiresAt,
+      });
+
+      // Update sync storage so popup and content script know user is logged in
+      await chrome.storage.sync.set({
+        isLoggedIn: true,
+        userEmail: userEmail,
+      });
+
+      // Schedule token refresh before expiry
+      const expiresInSeconds = Math.max(Math.floor((tokenExpiresAt - Date.now()) / 1000), 60);
+      schedulePortalTokenRefresh(expiresInSeconds);
+
+      // Refresh tier info
+      cachedTierInfo = null;
+      tierCacheExpiry = 0;
+
+      console.log('PhishArmor: Portal login tokens received and stored. userId:', userId);
+
+      // Notify any open Gmail tabs to refresh their state
+      const tabs = await chrome.tabs.query({ url: '*://mail.google.com/*' });
+      for (const tab of tabs) {
+        chrome.tabs.sendMessage(tab.id, { action: 'authStateChanged', isLoggedIn: true }).catch(() => {});
+      }
+
+      sendResponse({ success: true, message: 'Extension activated' });
+    } catch (err) {
+      console.error('PhishArmor: Portal login bridge error:', err);
+      sendResponse({ success: false, error: err.message });
+    }
+    return;
+  }
+
+  if (message.action === 'checkExtensionInstalled') {
+    sendResponse({ installed: true, version: chrome.runtime.getManifest().version });
+    return;
+  }
+
+  sendResponse({ success: false, error: 'Unknown action' });
+});
+
+function schedulePortalTokenRefresh(expiresInSeconds) {
+  const refreshInMs = Math.max(
+    (expiresInSeconds * 1000) - (5 * 60 * 1000),
+    60000
+  );
+  chrome.alarms.create('phisharmor-token-refresh', {
+    delayInMinutes: refreshInMs / 60000,
+  });
+}
 
 
 // ---------------------------------------------------------------------------
@@ -259,7 +363,25 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
     // Get tier info for analysis gating
     const tierInfo = await getCachedTierInfo();
 
-    // Check if auto-scan is being triggered but not allowed
+    // Check user preference for auto-analyze
+    if (emailData.triggerType === 'auto') {
+      const prefs = await chrome.storage.sync.get({ autoAnalyze: true });
+      if (!prefs.autoAnalyze) {
+        console.log('PhishArmor: Auto-analyze disabled by user preference');
+        const manualDetails = {
+          level: 'manual',
+          score: 'Manual Only',
+          message: 'Click the shield to scan this email.',
+          indicators: {},
+          aiAnalysisDetails: {},
+        };
+        await Storage.cacheAnalysisResult(emailData.id, manualDetails);
+        sendShieldUpdate(tabId, emailData.id, manualDetails);
+        return;
+      }
+    }
+
+    // Check if auto-scan is being triggered but not allowed by tier
     if (emailData.triggerType === 'auto' && !tierInfo.can_auto_scan) {
       console.log('PhishArmor: Auto-scan not allowed for tier', tierInfo.tier);
       const manualDetails = {
@@ -315,6 +437,51 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
       message: 'AI analysis in progress...',
     });
 
+    // 2.5. Fetch email data via Gmail API if we only have a message ID
+    //      (content script now sends just the ID instead of scraped DOM data)
+    if (emailData.id && !emailData.bodyText && !emailData.body) {
+      console.log('PhishArmor: Fetching email via Gmail API for:', emailData.id);
+      try {
+        const gmailData = await GmailAPI.fetchEmailById(emailData.id);
+        // Merge Gmail API data into emailData (preserving triggerType, etc.)
+        const triggerType = emailData.triggerType;
+        emailData = { ...emailData, ...gmailData };
+        emailData.triggerType = triggerType;
+        console.log('PhishArmor: Gmail API fetch successful —', emailData.sender, '—', emailData.subject);
+      } catch (gmailError) {
+        console.error('PhishArmor: Gmail API fetch failed:', gmailError.message, gmailError.code);
+
+        if (gmailError.isTokenError) {
+          // Google token missing or expired — user needs to re-authenticate
+          const reAuthDetails = {
+            level: 'login_required',
+            score: 'Sign In Again',
+            message: 'Your Gmail access has expired. Please sign in again to enable email scanning.',
+            indicators: {},
+            aiAnalysisDetails: {},
+          };
+          await Storage.cacheAnalysisResult(emailData.id, reAuthDetails);
+          sendShieldUpdate(tabId, emailData.id, reAuthDetails);
+          return;
+        }
+
+        // Other Gmail API errors (network, not found, etc.)
+        const errorDetails = {
+          level: 'error',
+          score: 'Error',
+          color: 'grey',
+          message: gmailError.isNetworkError
+            ? 'Unable to reach Gmail. Please check your connection.'
+            : `Failed to fetch email: ${gmailError.message}`,
+          indicators: {},
+          aiAnalysisDetails: {},
+        };
+        await Storage.cacheAnalysisResult(emailData.id, errorDetails);
+        sendShieldUpdate(tabId, emailData.id, errorDetails);
+        return;
+      }
+    }
+
     // 3. Call the backend (handles all AI/security checks)
     const startTime = Date.now();
     const rawSender = emailData.sender || emailData.from || 'unknown';
@@ -325,7 +492,8 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
       body: emailData.bodyText || emailData.body || '',
       bodyHtml: emailData.bodyHtml || '',
       gmailMessageId: emailData.id,
-      urls: extractUrlsFromText(emailData.bodyText || emailData.body || ''),
+      urls: emailData.urls || extractUrlsFromText(emailData.bodyText || emailData.body || ''),
+      emailHeaders: emailData.emailHeaders || null,
     });
     const elapsed = Date.now() - startTime;
 
@@ -335,12 +503,7 @@ async function handleEmailAnalysis(emailData, tabId, forceDisplay = false) {
     // 5. Cache the result
     await Storage.cacheAnalysisResult(emailData.id, scoreDetails);
 
-    // 6. Increment scan counter and update tier cache
-    await Storage.incrementCounter('emailsScannedCount');
-    if (scoreDetails.level === 'high' || scoreDetails.level === 'critical') {
-      await Storage.incrementCounter('flaggedEmailsCount');
-    }
-    // Update cached tier's daily_scans_used counter
+    // 6. Update cached tier's daily_scans_used counter
     if (cachedTierInfo) {
       cachedTierInfo.daily_scans_used = (cachedTierInfo.daily_scans_used || 0) + 1;
       cachedTierInfo.scans_remaining = Math.max(0, cachedTierInfo.daily_scan_limit - cachedTierInfo.daily_scans_used);
@@ -588,7 +751,7 @@ async function handleGetUserStats(sendResponse) {
         securityScore: stats.security_score,
         emailsScanned: stats.total_scans,
         blockedUrls: stats.total_flagged,
-        explanation: `${stats.total_scans} emails scanned, ${stats.total_flagged} flagged.`,
+        explanation: `${stats.total_scans} emails scanned, ${stats.total_flagged} flagged this month.`,
       },
     });
   } catch (error) {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PhishArmor",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "AI-powered phishing detection for your emails.",
   "permissions": [
     "storage",
@@ -12,15 +12,13 @@
     "identity"
   ],
   "host_permissions": [
-    "*://*.google.com/*",
-    "*://*.outlook.live.com/*",
-    "*://*.outlook.office.com/*",
-    "*://*.mail.yahoo.com/*",
+    "*://mail.google.com/*",
+    "https://gmail.googleapis.com/*",
     "https://phisharmor-backend-bd392.ondigitalocean.app/*",
     "https://indcrrlvpotinxdhrthg.supabase.co/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://phisharmor-backend-bd392.ondigitalocean.app https://indcrrlvpotinxdhrthg.supabase.co"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://phisharmor-backend-bd392.ondigitalocean.app https://indcrrlvpotinxdhrthg.supabase.co https://gmail.googleapis.com"
   },
   "action": {
     "default_popup": "popup/popup-v2.html",
@@ -37,7 +35,7 @@
   "options_page": "options/options-v2.html",
   "content_scripts": [
     {
-      "matches": ["*://mail.google.com/*", "*://outlook.live.com/*", "*://outlook.office.com/*", "*://mail.yahoo.com/*"],
+      "matches": ["*://mail.google.com/*"],
       "js": ["content_scripts/content.js"],
       "css": ["content_scripts/content.css"]
     }
@@ -49,6 +47,7 @@
         "icons/shield-yellow.png",
         "icons/shield-red.png",
         "icons/shield-grey.png",
+        "icons/shield-blue.png",
         "icons/logo-50x50.png",
         "icons/checkmark-green.png",
         "icons/cross-red.png",
@@ -56,7 +55,7 @@
         "icons/loading.gif",
         "assets/logo1.png"
       ],
-      "matches": ["*://mail.google.com/*", "*://outlook.live.com/*", "*://outlook.office.com/*", "*://mail.yahoo.com/*"]
+      "matches": ["*://mail.google.com/*"]
     }
   ],
   "icons": {
@@ -64,5 +63,13 @@
     "32": "icons/32x32.png",
     "48": "icons/48x48.png",
     "128": "icons/128x128.png"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://app.phisharmor.ai/*",
+      "https://*.phisharmor.ai/*",
+      "https://phisharmor.com/*",
+      "https://*.phisharmor.com/*"
+    ]
   }
 }

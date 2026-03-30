@@ -167,6 +167,8 @@ async function analyzeEmail(emailData) {
         body_html: emailData.bodyHtml || null,
         gmail_message_id: emailData.gmailMessageId || emailData.id || null,
         urls: emailData.urls || [],
+        // Email authentication headers from Gmail API (SPF, DKIM, DMARC, etc.)
+        email_headers: emailData.emailHeaders || null,
       },
       timeout: ANALYSIS_TIMEOUT_MS,
       requireAuth: true,

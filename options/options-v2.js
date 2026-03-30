@@ -1,86 +1,96 @@
 /**
- * PhishArmor Options Page v2.0
+ * PhishArmor Options Page v2.1
  *
- * User preferences only — no API key management.
+ * Modern settings UI with connected account display.
  * Settings sync to backend for authenticated users.
  */
 
 /**
- * Load tier information and update UI for premium features
+ * Load tier information and update the account + features UI
  */
 async function loadTierAndUpdateUI() {
-    try {
-        const response = await new Promise((resolve) => {
-            chrome.runtime.sendMessage({ action: 'getTierInfo' }, resolve);
-        });
+  try {
+    const response = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: 'getTierInfo' }, resolve);
+    });
 
-        if (!response || !response.success || !response.tierInfo) return;
+    if (!response || !response.success || !response.tierInfo) return;
 
-        const tierInfo = response.tierInfo;
-        const autoAnalyzeCheckbox = document.getElementById('auto-analyze');
-        const lockNotice = document.getElementById('auto-analyze-lock');
+    const tierInfo = response.tierInfo;
 
-        // Lock auto-analyze for free users
-        if (tierInfo.tier === 'free') {
-            if (autoAnalyzeCheckbox) {
-                autoAnalyzeCheckbox.disabled = true;
-                autoAnalyzeCheckbox.checked = false;
-                autoAnalyzeCheckbox.style.opacity = '0.5';
-                autoAnalyzeCheckbox.style.cursor = 'not-allowed';
-            }
-            // Also disable the label
-            const label = autoAnalyzeCheckbox?.closest('label') || autoAnalyzeCheckbox?.parentElement;
-            if (label) label.style.opacity = '0.6';
+    // --- Auto-analyze lock for free users ---
+    const autoAnalyzeCheckbox = document.getElementById('auto-analyze');
+    const lockNotice = document.getElementById('auto-analyze-lock');
 
-            if (lockNotice) lockNotice.style.display = 'block';
-        } else {
-            if (autoAnalyzeCheckbox) {
-                autoAnalyzeCheckbox.disabled = false;
-                autoAnalyzeCheckbox.style.opacity = '1';
-                autoAnalyzeCheckbox.style.cursor = 'pointer';
-            }
-            if (lockNotice) lockNotice.style.display = 'none';
-        }
-
-        // Update account section
-        const tierEl = document.getElementById('account-tier');
-        const scansEl = document.getElementById('account-scans');
-        const trialEl = document.getElementById('account-trial');
-
-        if (tierEl) {
-            const tierLabels = {
-                'free': 'Free Plan — $0/forever',
-                'trial': 'Premium Trial — $4.99/mo after trial',
-                'premium': 'Premium Plan — $4.99/mo'
-            };
-            tierEl.textContent = `Plan: ${tierLabels[tierInfo.tier] || 'Free Plan'}`;
-        }
-
-        if (scansEl) {
-            scansEl.textContent = `Daily scans: ${tierInfo.daily_scans_used || 0} of ${tierInfo.daily_scan_limit || 5} used today`;
-        }
-
-        if (trialEl && tierInfo.tier === 'trial') {
-            trialEl.textContent = `Trial ends in ${tierInfo.trial_days_remaining || 0} days`;
-            trialEl.style.display = 'block';
-        } else if (trialEl) {
-            trialEl.style.display = 'none';
-        }
-
-        // Update the existing plan display if there is one
-        const planEl = document.getElementById('account-plan');
-        if (planEl) {
-            const used = tierInfo.daily_scans_used || 0;
-            const limit = tierInfo.daily_scan_limit || 5;
-            planEl.textContent = `Plan: ${tierInfo.tier === 'premium' ? 'Premium' : tierInfo.tier === 'trial' ? 'Premium Trial' : 'Free'} (${limit - used} scans remaining today)`;
-        }
-    } catch (e) {
-        console.error('PhishArmor: Error loading tier info for options:', e);
+    if (tierInfo.tier === 'free') {
+      if (autoAnalyzeCheckbox) {
+        autoAnalyzeCheckbox.disabled = true;
+        autoAnalyzeCheckbox.checked = false;
+      }
+      if (lockNotice) lockNotice.style.display = 'block';
+    } else {
+      if (autoAnalyzeCheckbox) autoAnalyzeCheckbox.disabled = false;
+      if (lockNotice) lockNotice.style.display = 'none';
     }
+
+    // --- Tier badge ---
+    const badgeContainer = document.getElementById('tier-badge-container');
+    const badge = document.getElementById('tier-badge');
+    if (badgeContainer && badge) {
+      badgeContainer.style.display = 'block';
+      badge.className = 'tier-badge ' + (tierInfo.tier || 'free');
+      const labels = { free: 'Free Plan', trial: 'Premium Trial', premium: 'Premium' };
+      badge.textContent = labels[tierInfo.tier] || 'Free Plan';
+    }
+
+    // --- Scan usage ---
+    const usageSection = document.getElementById('scan-usage-section');
+    if (usageSection) {
+      usageSection.style.display = 'block';
+      const used = tierInfo.daily_scans_used || 0;
+      const limit = tierInfo.daily_scan_limit || 5;
+      const remaining = Math.max(0, limit - used);
+      const pct = Math.min(100, Math.round((used / limit) * 100));
+
+      document.getElementById('scan-usage-label').textContent = `${used} of ${limit} scans used today`;
+      document.getElementById('scan-usage-remaining').textContent = `${remaining} remaining`;
+
+      const bar = document.getElementById('scan-bar-fill');
+      bar.style.width = `${pct}%`;
+      if (pct >= 80) bar.style.background = '#ef4444';
+      else if (pct >= 60) bar.style.background = '#f59e0b';
+      else bar.style.background = '#3b82f6';
+    }
+
+    // --- Trial notice ---
+    const trialNotice = document.getElementById('trial-notice');
+    if (trialNotice && tierInfo.tier === 'trial') {
+      trialNotice.textContent = `Trial ends in ${tierInfo.trial_days_remaining || 0} days`;
+      trialNotice.style.display = 'block';
+    } else if (trialNotice) {
+      trialNotice.style.display = 'none';
+    }
+  } catch (e) {
+    console.error('PhishArmor: Error loading tier info for options:', e);
+  }
+}
+
+/**
+ * Update radio option visual state
+ */
+function updateRadioVisuals() {
+  document.querySelectorAll('.radio-option').forEach(option => {
+    const radio = option.querySelector('input[type="radio"]');
+    if (radio.checked) {
+      option.classList.add('selected');
+    } else {
+      option.classList.remove('selected');
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Load current settings
+  // --- Load current settings ---
   const prefs = await chrome.storage.sync.get({
     sensitivityLevel: 'medium',
     showNotifications: true,
@@ -92,46 +102,51 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Set radio buttons
   const sensitivityRadio = document.querySelector(`input[name="sensitivity"][value="${prefs.sensitivityLevel}"]`);
   if (sensitivityRadio) sensitivityRadio.checked = true;
+  updateRadioVisuals();
 
   // Set checkboxes
   document.getElementById('show-notifications').checked = prefs.showNotifications;
   document.getElementById('auto-analyze').checked = prefs.autoAnalyze;
 
-  // Load tier info and update UI
-  await loadTierAndUpdateUI();
+  // --- Radio click handlers for visual state ---
+  document.querySelectorAll('.radio-option').forEach(option => {
+    option.addEventListener('click', () => {
+      const radio = option.querySelector('input[type="radio"]');
+      radio.checked = true;
+      updateRadioVisuals();
+    });
+  });
 
-  // Show account status
-  const accountStatus = document.getElementById('account-status');
+  // --- Account display ---
+  const avatarEl = document.getElementById('account-avatar');
+  const emailEl = document.getElementById('account-email');
+  const notLoggedInEl = document.getElementById('account-not-logged-in');
+
   if (prefs.isLoggedIn && prefs.userEmail) {
-    accountStatus.textContent = `Logged in as ${prefs.userEmail}`;
-
-    // Try to get plan info from backend
-    try {
-      const response = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: 'getSettings' }, resolve);
-      });
-      if (response.success && response.settings?.plan) {
-        const planEl = document.getElementById('account-plan');
-        planEl.textContent = `Plan: ${response.settings.plan} (${response.settings.credits_remaining || 0} credits remaining)`;
-        planEl.style.display = 'block';
-      }
-    } catch (e) {
-      // Not critical
-    }
+    emailEl.textContent = prefs.userEmail;
+    if (notLoggedInEl) notLoggedInEl.style.display = 'none';
+    // Set avatar initial
+    const initial = prefs.userEmail.charAt(0).toUpperCase();
+    if (avatarEl) avatarEl.textContent = initial;
   } else {
-    accountStatus.textContent = 'Not logged in. Open the extension popup to sign in.';
+    emailEl.textContent = 'Not connected';
+    if (avatarEl) {
+      avatarEl.textContent = '?';
+      avatarEl.style.background = '#94a3b8';
+    }
   }
 
-  // Auto-analyze checkbox change handler
+  // --- Load tier info ---
+  await loadTierAndUpdateUI();
+
+  // --- Auto-analyze guard for free users ---
   const autoAnalyzeCheckbox = document.getElementById('auto-analyze');
   if (autoAnalyzeCheckbox) {
     autoAnalyzeCheckbox.addEventListener('change', (e) => {
       if (e.target.checked) {
-        // Check if user is on free tier
         chrome.runtime.sendMessage({ action: 'getTierInfo' }, (response) => {
           if (response?.tierInfo?.tier === 'free') {
             e.target.checked = false;
-            // Show upgrade prompt
             const lockNotice = document.getElementById('auto-analyze-lock');
             if (lockNotice) {
               lockNotice.style.display = 'block';
@@ -145,7 +160,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Save handler
+  // --- Save handler ---
   document.getElementById('saveSettingsButton').addEventListener('click', async () => {
     const sensitivity = document.querySelector('input[name="sensitivity"]:checked')?.value || 'medium';
     const showNotifications = document.getElementById('show-notifications').checked;
@@ -160,13 +175,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Save locally
     await chrome.storage.sync.set(settings);
 
-    // Sync to backend
+    // Sync to backend (best-effort)
     try {
       await new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'updateSettings', settings }, resolve);
       });
     } catch (e) {
-      // Local save succeeded, backend sync is best-effort
+      // Local save succeeded
     }
 
     // Show success
