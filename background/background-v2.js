@@ -665,7 +665,9 @@ async function handleAuthenticate(message, sendResponse) {
 
     let result;
     if (type === 'google') {
+      console.log('PhishArmor: Starting Google OAuth flow...');
       result = await Auth.signInWithGoogle();
+      console.log('PhishArmor: Google OAuth flow completed. Success:', result.success);
     } else {
       result = await Auth.signIn(email, password);
     }
@@ -682,9 +684,13 @@ async function handleAuthenticate(message, sendResponse) {
         sendResponse({ success: true, user: result.user, userStats: null });
       }
     } else {
+      console.warn('PhishArmor: Authentication failed:', result.error);
       sendResponse({ success: false, error: result.error });
     }
   } catch (error) {
+    // This can happen if the popup closed during Google OAuth
+    // (the message port disconnects). The auth may still have succeeded.
+    console.warn('PhishArmor: handleAuthenticate error (popup may have closed):', error.message);
     sendResponse({ success: false, error: error.message });
   }
 }
@@ -715,9 +721,21 @@ async function handleLogout(sendResponse) {
 async function handleCheckAuth(sendResponse) {
   try {
     const isAuthed = await Auth.isAuthenticated();
-    const user = isAuthed ? await Auth.getCurrentUser() : null;
-    sendResponse({ isAuthenticated: isAuthed, user });
+    console.log('PhishArmor: checkAuth — isAuthenticated:', isAuthed);
+
+    if (isAuthed) {
+      const user = await Auth.getCurrentUser();
+      console.log('PhishArmor: checkAuth — user:', user?.email || 'null');
+      sendResponse({ isAuthenticated: true, user });
+    } else {
+      // Log why auth failed for debugging
+      const stored = await chrome.storage.session.get(['authToken', 'tokenExpiresAt']);
+      console.log('PhishArmor: checkAuth — not authenticated. Token exists:', !!stored.authToken,
+        'Expired:', stored.tokenExpiresAt ? Date.now() > stored.tokenExpiresAt : 'no-expiry');
+      sendResponse({ isAuthenticated: false, user: null });
+    }
   } catch (error) {
+    console.error('PhishArmor: checkAuth error:', error.message);
     sendResponse({ isAuthenticated: false, user: null });
   }
 }

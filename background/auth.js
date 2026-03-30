@@ -143,6 +143,7 @@ async function signInWithGoogle() {
     });
 
     // Extract tokens from the callback URL
+    console.log('PhishArmor Auth: OAuth callback received, parsing tokens...');
     const url = new URL(responseUrl);
     const hashParams = new URLSearchParams(url.hash.substring(1));
     const accessToken = hashParams.get('access_token');
@@ -152,9 +153,22 @@ async function signInWithGoogle() {
     const providerToken = hashParams.get('provider_token');
     const providerRefreshToken = hashParams.get('provider_refresh_token');
 
+    // Check for OAuth errors in the callback
+    const oauthError = hashParams.get('error');
+    const oauthErrorDesc = hashParams.get('error_description');
+    if (oauthError) {
+      console.error('PhishArmor Auth: OAuth returned error:', oauthError, oauthErrorDesc);
+      throw new Error(oauthErrorDesc || oauthError || 'OAuth authentication failed');
+    }
+
     if (!accessToken) {
+      // Log the callback URL structure for debugging (redact tokens)
+      console.error('PhishArmor Auth: No access token in callback. Hash present:', !!url.hash,
+        'Hash length:', url.hash.length, 'Query params:', url.search ? 'yes' : 'no');
       throw new Error('No access token received from OAuth flow');
     }
+    console.log('PhishArmor Auth: Tokens parsed — access:', !!accessToken, 'refresh:', !!refreshToken,
+      'provider:', !!providerToken, 'expires_in:', expiresIn);
 
     await storeTokens({
       access_token: accessToken,
@@ -171,8 +185,12 @@ async function signInWithGoogle() {
       console.warn('PhishArmor Auth: No Google provider token received — Gmail API calls will not work');
     }
 
-    // Get user profile
+    // Get user profile and update sync storage with the user's email
+    // (storeTokens doesn't have user info during OAuth, so we fix it here)
     const user = await getCurrentUser();
+    if (user?.email) {
+      await chrome.storage.sync.set({ isLoggedIn: true, userEmail: user.email });
+    }
     return { success: true, user };
 
   } catch (error) {

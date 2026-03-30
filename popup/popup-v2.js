@@ -17,6 +17,7 @@ class PopupManager {
       this.setupEventListeners();
       await this.checkAuthStatus();
     } catch (error) {
+      console.error('PhishArmor Popup: init() error — showing login view. Error:', error.message, error.stack);
       this.handleError('Failed to initialize', error);
       this.showView('logged-out-view');
     }
@@ -119,12 +120,54 @@ class PopupManager {
   async checkAuthStatus() {
     this.showView('loading-view');
 
-    const response = await this.sendMessage({ action: 'checkAuth' });
+    // Retry checkAuth up to 3 times with increasing delay.
+    // The MV3 service worker may be starting up when the popup opens,
+    // causing the first sendMessage to fail with "Receiving end does not exist."
+    let response = null;
+    let lastError = null;
 
-    if (response.isAuthenticated) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        response = await this.sendMessage({ action: 'checkAuth' });
+        break; // Success — exit retry loop
+      } catch (error) {
+        lastError = error;
+        console.warn(`PhishArmor Popup: checkAuth attempt ${attempt + 1} failed:`, error.message);
+        if (attempt < 2) {
+          // Wait before retrying (200ms, 500ms) to let service worker start
+          await new Promise(r => setTimeout(r, attempt === 0 ? 200 : 500));
+        }
+      }
+    }
+
+    if (response && response.isAuthenticated) {
       await this.loadDashboard(response.user);
       this.showView('logged-in-view');
     } else {
+      // If all message attempts failed, check sync storage as a fallback.
+      // Sync storage is set to isLoggedIn:true after successful auth and
+      // persists even if the service worker hasn't started yet.
+      if (!response) {
+        try {
+          const syncData = await chrome.storage.sync.get(['isLoggedIn']);
+          if (syncData.isLoggedIn) {
+            console.log('PhishArmor Popup: sync storage says logged in, retrying checkAuth...');
+            await new Promise(r => setTimeout(r, 1000));
+            try {
+              response = await this.sendMessage({ action: 'checkAuth' });
+              if (response && response.isAuthenticated) {
+                await this.loadDashboard(response.user);
+                this.showView('logged-in-view');
+                return;
+              }
+            } catch (e) {
+              console.warn('PhishArmor Popup: final checkAuth retry failed:', e.message);
+            }
+          }
+        } catch (e) {
+          // sync storage check failed — fall through to login
+        }
+      }
       this.showView('logged-out-view');
     }
   }
@@ -187,7 +230,12 @@ class PopupManager {
         this.showError('login-error', response.error || 'Google sign-in failed.');
       }
     } catch (error) {
-      this.showError('login-error', 'Google sign-in failed. Please try again.');
+      // If the popup was closed during OAuth (common with chrome.identity flows),
+      // the message port disconnects and we get here. On the next popup open,
+      // checkAuthStatus will find the stored tokens and show the dashboard.
+      // But if the popup somehow survived, show a helpful message.
+      console.warn('PhishArmor Popup: Google login message failed (popup may have closed during OAuth):', error.message);
+      this.showError('login-error', 'Sign-in may still be completing. Close and reopen this popup.');
     } finally {
       this.setButtonLoading(button, false);
     }
@@ -267,10 +315,14 @@ class PopupManager {
 
   async loadDashboard(user) {
     // Show user email
-    const emailDisplay = document.getElementById('user-email-display');
-    if (emailDisplay && user?.email) {
-      emailDisplay.textContent = user.email;
-      emailDisplay.style.display = 'block';
+    try {
+      const emailDisplay = document.getElementById('user-email-display');
+      if (emailDisplay && user?.email) {
+        emailDisplay.textContent = user.email;
+        emailDisplay.style.display = 'block';
+      }
+    } catch (e) {
+      console.warn('PhishArmor Popup: Failed to display user email:', e);
     }
 
     // Fetch stats from backend
@@ -280,11 +332,15 @@ class PopupManager {
         this.updateStats(response.userStats);
       }
     } catch (error) {
-      console.warn('Failed to load stats:', error);
+      console.warn('PhishArmor Popup: Failed to load stats:', error);
     }
 
     // Load tier information
-    await this.loadTierInfo();
+    try {
+      await this.loadTierInfo();
+    } catch (error) {
+      console.warn('PhishArmor Popup: Failed to load tier info:', error);
+    }
   }
 
   async loadTierInfo() {
